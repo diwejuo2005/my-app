@@ -371,16 +371,11 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete, onOpenDatePicker }) {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
     },
     dateTxt: {
       flex: 1,
       color: task.date ? C.text : C.textMuted,
       fontSize: 13,
-    },
-    calIcon: {
-      fontSize: 13,
-      color: C.textMuted,
     },
     completionCell: {
       flexDirection: 'column',
@@ -455,7 +450,6 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete, onOpenDatePicker }) {
       <View style={[s.cell, { flex: 2 }]}>
         <TouchableOpacity style={s.dateTouchable} onPress={() => onOpenDatePicker(index)} activeOpacity={0.7}>
           <Text style={s.dateTxt}>{task.date || 'Pick date'}</Text>
-          <Text style={s.calIcon}>📅</Text>
         </TouchableOpacity>
       </View>
 
