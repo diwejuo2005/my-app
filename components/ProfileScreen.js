@@ -32,10 +32,14 @@ export default function ProfileScreen({ onComplete, existingProfile }) {
       setError('Last name is required.');
       return;
     }
+    if (!email.trim()) {
+      setError('Gmail address is required to sync your calendar.');
+      return;
+    }
     const profile = {
       firstName: firstName.trim(),
       lastName:  lastName.trim(),
-      email:     email.trim(),
+      email:     email.trim().toLowerCase(),
     };
     await storage.set('userProfile', profile);
     onComplete(profile);
@@ -177,11 +181,11 @@ export default function ProfileScreen({ onComplete, existingProfile }) {
             returnKeyType="next"
           />
 
-          <Text style={s.label}>GMAIL ADDRESS (optional)</Text>
+          <Text style={s.label}>GMAIL ADDRESS</Text>
           <TextInput
             style={s.input}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={v => { setEmail(v); setError(''); }}
             placeholder="you@gmail.com"
             placeholderTextColor={C.textMuted}
             keyboardType="email-address"
@@ -190,8 +194,8 @@ export default function ProfileScreen({ onComplete, existingProfile }) {
             onSubmitEditing={handleSubmit}
           />
           <Text style={s.hint}>
-            Used to embed your Google Calendar. Make sure you are also signed
-            into this account in your browser.
+            Your Google Calendar will sync using this address. Make sure you
+            are signed into Google in this browser so your calendar appears.
           </Text>
 
           <TouchableOpacity style={s.btn} onPress={handleSubmit} activeOpacity={0.8}>

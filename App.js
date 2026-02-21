@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './components/shared/ThemeContext';
-import { storage } from './components/shared/constants';
+import { storage, setStorageUser } from './components/shared/constants';
 import Navbar from './components/Navbar';
 import SearchBar from './components/SearchBar';
 import TaskTrackerPage from './components/TaskTrackerPage';
@@ -23,28 +23,45 @@ function AppInner() {
   const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Navigation state
-  const [activeTab,    setActiveTab]    = useState('TASKS');
-  const [currentWeek,  setCurrentWeek]  = useState(6); // lifted from TaskTrackerPage
+  const [activeTab,   setActiveTab]   = useState('TASKS');
+  const [currentWeek, setCurrentWeek] = useState(6); // lifted from TaskTrackerPage
 
-  // Load profile + last-used week from storage on first mount
+  // Load profile on first mount.
+  // IMPORTANT: read userProfile first (global key, no prefix), then set the
+  // per-user prefix, then read user-specific data so keys are correct.
   useEffect(() => {
-    Promise.all([
-      storage.get('userProfile'),
-      storage.get('taskTracker'),
-    ]).then(([p, t]) => {
-      setProfile(p?.firstName ? p : null);
-      if (t?.week) setCurrentWeek(t.week);
-      setProfileLoaded(true);
+    storage.get('userProfile').then(p => {
+      const validProfile = p?.firstName ? p : null;
+
+      // Restore the per-user storage prefix for returning users
+      if (validProfile?.email) {
+        setStorageUser(validProfile.email);
+      }
+
+      setProfile(validProfile);
+
+      // Now read user-specific data (prefix is set)
+      storage.get('taskTracker').then(t => {
+        if (t?.week) setCurrentWeek(t.week);
+        setProfileLoaded(true);
+      });
     });
   }, []);
 
   // ── Handlers ────────────────────────────────────────────────────────────────
-  const handleProfileComplete = (p) => setProfile(p);
+
+  const handleProfileComplete = (p) => {
+    // Activate the per-user storage namespace before any data is saved
+    setStorageUser(p.email);
+    setProfile(p);
+  };
 
   const handleSignOut = async () => {
-    await storage.set('userProfile', null);
+    await storage.set('userProfile', null); // global key — always clears correctly
+    setStorageUser('');                      // clear namespace prefix
     setProfile(null);
     setActiveTab('TASKS');
+    setCurrentWeek(6);
   };
 
   const handleSearchNavigate = (weekNum) => {
@@ -54,7 +71,7 @@ function AppInner() {
 
   // ── Render branches ─────────────────────────────────────────────────────────
 
-  // Still checking storage — render blank to avoid flash
+  // Still reading storage — blank to avoid flash
   if (!profileLoaded) {
     return <View style={{ flex: 1, backgroundColor: C.bg }} />;
   }

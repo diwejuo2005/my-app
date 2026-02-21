@@ -25,12 +25,28 @@ export function pctColor(pct) {
   return C.border;
 }
 
+// ─── Per-user storage namespacing ─────────────────────────────────────────────
+// Keys in this set are global (read before login) and are never namespaced.
+const GLOBAL_KEYS = new Set(['userProfile', 'theme']);
+
+// Module-level prefix — set immediately after login/mount, cleared on sign-out.
+let _prefix = '';
+
+/**
+ * Set the storage prefix for the currently logged-in user.
+ * Call with the user's email after login; call with '' on sign-out.
+ */
+export function setStorageUser(email) {
+  _prefix = email ? `${encodeURIComponent(email)}__` : '';
+}
+
 // ─── Cross-platform storage ───────────────────────────────────────────────────
 export const storage = {
   async get(key) {
+    const k = GLOBAL_KEYS.has(key) ? key : _prefix + key;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        const v = window.localStorage.getItem(key);
+        const v = window.localStorage.getItem(k);
         return v ? JSON.parse(v) : null;
       }
       return null;
@@ -39,9 +55,10 @@ export const storage = {
     }
   },
   async set(key, value) {
+    const k = GLOBAL_KEYS.has(key) ? key : _prefix + key;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(key, JSON.stringify(value));
+        window.localStorage.setItem(k, JSON.stringify(value));
       }
     } catch {}
   },
