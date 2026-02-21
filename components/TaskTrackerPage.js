@@ -499,12 +499,12 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete, onOpenDatePicker }) {
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-export default function TaskTrackerPage() {
+// `week` and `onWeekChange` are lifted to App.js so search can navigate weeks
+export default function TaskTrackerPage({ week, onWeekChange }) {
   const { C } = useTheme();
-  const [week,        setWeek]        = useState(6);
   const [weeks,       setWeeks]       = useState({});
   const [editingWeek, setEditingWeek] = useState(false);
-  const [weekInput,   setWeekInput]   = useState('6');
+  const [weekInput,   setWeekInput]   = useState(String(week));
 
   // Date picker state
   const [datePickerIdx,     setDatePickerIdx]     = useState(null); // task index
@@ -516,15 +516,14 @@ export default function TaskTrackerPage() {
     ? Math.round(tasks.reduce((a, t) => a + (Number(t.completion) || 0), 0) / tasks.length)
     : 0;
 
+  // Load only `weeks` from storage — `week` is initialised by App.js
   useEffect(() => {
     storage.get('taskTracker').then(data => {
-      if (data) {
-        setWeek(data.week || 6);
-        setWeeks(data.weeks || {});
-      }
+      if (data) setWeeks(data.weeks || {});
     });
   }, []);
 
+  // Persist both week and weeks together so the save format stays the same
   useEffect(() => {
     storage.set('taskTracker', { week, weeks });
   }, [week, weeks]);
@@ -539,7 +538,21 @@ export default function TaskTrackerPage() {
   const updateTask = useCallback((index, field, value) => {
     setWeeks(prev => {
       const arr = [...(prev[week] || [])];
+      // Capture completion BEFORE mutation for history guard
+      const prevCompletion = Number(arr[index]?.completion) || 0;
       arr[index] = { ...arr[index], [field]: value };
+
+      // Write to completion history when a task first reaches 100%
+      if (field === 'completion' && Number(value) >= 100 && prevCompletion < 100) {
+        const title = arr[index].title || '(untitled)';
+        storage.get('completionHistory').then(existing => {
+          const list = Array.isArray(existing) ? existing : [];
+          storage.set('completionHistory',
+            [{ title, weekNum: week, completedAt: Date.now() }, ...list].slice(0, 20)
+          );
+        });
+      }
+
       return { ...prev, [week]: arr };
     });
   }, [week]);
@@ -554,7 +567,7 @@ export default function TaskTrackerPage() {
 
   const commitWeekEdit = () => {
     const n = parseInt(weekInput);
-    if (!isNaN(n) && n >= 1 && n <= 99) setWeek(n);
+    if (!isNaN(n) && n >= 1 && n <= 99) onWeekChange(n);
     setEditingWeek(false);
   };
 
@@ -725,7 +738,7 @@ export default function TaskTrackerPage() {
       {/* Controls */}
       <View style={s.controls}>
         <View style={s.weekPicker}>
-          <TouchableOpacity style={s.arrowBtn} onPress={() => setWeek(w => Math.max(1, w - 1))}>
+          <TouchableOpacity style={s.arrowBtn} onPress={() => onWeekChange(Math.max(1, week - 1))}>
             <Text style={s.arrowTxt}>&#8249;</Text>
           </TouchableOpacity>
 
@@ -747,7 +760,7 @@ export default function TaskTrackerPage() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity style={s.arrowBtn} onPress={() => setWeek(w => w + 1)}>
+          <TouchableOpacity style={s.arrowBtn} onPress={() => onWeekChange(week + 1)}>
             <Text style={s.arrowTxt}>&#8250;</Text>
           </TouchableOpacity>
         </View>
