@@ -6,10 +6,266 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Modal,
   Platform,
 } from 'react-native';
 import { useTheme } from './shared/ThemeContext';
 import { pctColor, storage } from './shared/constants';
+
+// ─── Calendar Date Picker Modal ───────────────────────────────────────────────
+const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const MONTH_LABELS = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December',
+];
+
+function DatePickerModal({ visible, currentValue, onSelect, onClose }) {
+  const { C } = useTheme();
+
+  // Parse current date or default to today
+  const today = new Date();
+  const parseDate = (str) => {
+    if (!str) return null;
+    const parts = str.split('/');
+    if (parts.length === 3) {
+      const d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]));
+      if (!isNaN(d)) return d;
+    }
+    return null;
+  };
+  const parsedCurrent = parseDate(currentValue);
+  const [viewYear,  setViewYear]  = useState(parsedCurrent ? parsedCurrent.getFullYear()  : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(parsedCurrent ? parsedCurrent.getMonth()     : today.getMonth()); // 0-based
+  const [selected,  setSelected]  = useState(parsedCurrent);
+
+  // Reset when opened
+  useEffect(() => {
+    if (visible) {
+      const d = parseDate(currentValue) || today;
+      setViewYear(d.getFullYear());
+      setViewMonth(d.getMonth());
+      setSelected(parseDate(currentValue));
+    }
+  }, [visible, currentValue]);
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  // Build calendar days grid
+  const firstDay   = new Date(viewYear, viewMonth, 1).getDay(); // 0 = Sun
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  // pad to complete last row
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const isSelected = (d) => {
+    if (!d || !selected) return false;
+    return (
+      selected.getFullYear() === viewYear &&
+      selected.getMonth()    === viewMonth &&
+      selected.getDate()     === d
+    );
+  };
+  const isToday = (d) => {
+    if (!d) return false;
+    return (
+      today.getFullYear() === viewYear &&
+      today.getMonth()    === viewMonth &&
+      today.getDate()     === d
+    );
+  };
+
+  const handleSelect = (d) => {
+    if (!d) return;
+    const date = new Date(viewYear, viewMonth, d);
+    setSelected(date);
+    const mm = String(viewMonth + 1).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    onSelect(`${mm}/${dd}/${viewYear}`);
+  };
+
+  const s = useMemo(() => StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    picker: {
+      backgroundColor: C.surface,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: C.border,
+      width: 300,
+      paddingBottom: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.18,
+      shadowRadius: 20,
+      elevation: 12,
+    },
+    pickerHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+    },
+    navBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: C.surface2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    navTxt: { color: C.text, fontSize: 16, fontWeight: '600' },
+    monthYearTxt: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: C.text,
+      letterSpacing: 0.3,
+    },
+    dayLabelsRow: {
+      flexDirection: 'row',
+      paddingHorizontal: 10,
+      paddingTop: 10,
+      paddingBottom: 4,
+    },
+    dayLabel: {
+      flex: 1,
+      textAlign: 'center',
+      fontSize: 10,
+      fontWeight: '700',
+      color: C.textMuted,
+      letterSpacing: 0.5,
+    },
+    daysGrid: {
+      paddingHorizontal: 10,
+    },
+    daysRow: {
+      flexDirection: 'row',
+    },
+    dayCell: {
+      flex: 1,
+      aspectRatio: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 6,
+      marginVertical: 1,
+    },
+    dayCellEmpty: {},
+    dayCellSelected: { backgroundColor: C.primary },
+    dayCellToday: {
+      borderWidth: 1.5,
+      borderColor: C.primary,
+    },
+    dayTxt: { fontSize: 12, color: C.text, fontWeight: '500' },
+    dayTxtSelected: { color: '#fff', fontWeight: '700' },
+    dayTxtToday: { color: C.primary, fontWeight: '700' },
+    footer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      paddingTop: 12,
+      paddingHorizontal: 16,
+    },
+    cancelBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      alignItems: 'center',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: C.border,
+    },
+    cancelTxt: { color: C.textSec, fontSize: 13, fontWeight: '600' },
+  }), [C]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={e => e.stopPropagation()}>
+          <View style={s.picker}>
+            {/* Header */}
+            <View style={s.pickerHeader}>
+              <TouchableOpacity style={s.navBtn} onPress={prevMonth} activeOpacity={0.7}>
+                <Text style={s.navTxt}>‹</Text>
+              </TouchableOpacity>
+              <Text style={s.monthYearTxt}>{MONTH_LABELS[viewMonth]} {viewYear}</Text>
+              <TouchableOpacity style={s.navBtn} onPress={nextMonth} activeOpacity={0.7}>
+                <Text style={s.navTxt}>›</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Day labels */}
+            <View style={s.dayLabelsRow}>
+              {DAY_LABELS.map(d => (
+                <Text key={d} style={s.dayLabel}>{d}</Text>
+              ))}
+            </View>
+
+            {/* Days grid */}
+            <View style={s.daysGrid}>
+              {Array.from({ length: cells.length / 7 }, (_, row) => (
+                <View key={row} style={s.daysRow}>
+                  {cells.slice(row * 7, row * 7 + 7).map((d, col) => {
+                    const sel = isSelected(d);
+                    const tod = isToday(d);
+                    return (
+                      <TouchableOpacity
+                        key={col}
+                        style={[
+                          s.dayCell,
+                          !d && s.dayCellEmpty,
+                          tod && !sel && s.dayCellToday,
+                          sel && s.dayCellSelected,
+                        ]}
+                        onPress={() => handleSelect(d)}
+                        activeOpacity={d ? 0.7 : 1}
+                        disabled={!d}
+                      >
+                        {d ? (
+                          <Text style={[
+                            s.dayTxt,
+                            tod && !sel && s.dayTxtToday,
+                            sel && s.dayTxtSelected,
+                          ]}>
+                            {d}
+                          </Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+
+            {/* Footer */}
+            <View style={s.footer}>
+              <TouchableOpacity style={s.cancelBtn} onPress={onClose} activeOpacity={0.7}>
+                <Text style={s.cancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
 
 // ─── Column headers ───────────────────────────────────────────────────────────
 function TableHeader() {
@@ -20,7 +276,7 @@ function TableHeader() {
       backgroundColor: C.surface2,
       borderBottomWidth: 1,
       borderBottomColor: C.border,
-      paddingVertical: 8,
+      paddingVertical: 9,
     },
     colHeaderCell: {
       paddingHorizontal: 10,
@@ -31,7 +287,7 @@ function TableHeader() {
       fontSize: 9,
       fontWeight: '700',
       color: C.textMuted,
-      letterSpacing: 1.3,
+      letterSpacing: 1.4,
     },
   }), [C]);
 
@@ -55,7 +311,7 @@ function TableHeader() {
 }
 
 // ─── Single task row ──────────────────────────────────────────────────────────
-function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
+function TaskRow({ task, index, isAlt, onUpdate, onDelete, onOpenDatePicker }) {
   const { C } = useTheme();
   const pct   = Math.min(100, Math.max(0, Number(task.completion) || 0));
   const color = pctColor(pct);
@@ -72,13 +328,13 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
       backgroundColor: C.surface,
       borderBottomWidth: 1,
       borderBottomColor: C.borderLight,
-      minHeight: 48,
+      minHeight: 52,
     },
     tableRowAlt: {
       backgroundColor: C.surfaceAlt,
     },
     tableRowHover: {
-      backgroundColor: C.primary + '14', // 8% opacity tint
+      backgroundColor: C.primary + '10',
     },
     tableRowDone: {
       borderLeftWidth: 2,
@@ -88,7 +344,7 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: 10,
-      paddingVertical: 6,
+      paddingVertical: 8,
       borderRightWidth: 1,
       borderRightColor: C.borderLight,
       alignSelf: 'stretch',
@@ -110,6 +366,22 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
       minHeight: 36,
       maxHeight: 60,
     },
+    // Date cell
+    dateTouchable: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dateTxt: {
+      flex: 1,
+      color: task.date ? C.text : C.textMuted,
+      fontSize: 13,
+    },
+    calIcon: {
+      fontSize: 13,
+      color: C.textMuted,
+    },
     completionCell: {
       flexDirection: 'column',
       alignItems: 'center',
@@ -125,7 +397,7 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
       width: 44,
       textAlign: 'center',
       borderWidth: 1.5,
-      borderRadius: 5,
+      borderRadius: 6,
       color: C.text,
       fontWeight: '700',
       fontSize: 14,
@@ -138,16 +410,12 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
       fontWeight: '600',
     },
     miniBarTrack: {
-      width: 64,
+      width: 60,
       height: 3,
       backgroundColor: C.border,
       borderRadius: 99,
       overflow: 'hidden',
       flexDirection: 'row',
-    },
-    miniBarFill: {
-      height: '100%',
-      borderRadius: 99,
     },
     deleteCell: {
       alignItems: 'center',
@@ -156,11 +424,10 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
     },
     deleteTxt: {
       color: C.textMuted,
-      fontSize: 11,
-      fontWeight: '600',
-      letterSpacing: 0.5,
+      fontSize: 15,
+      fontWeight: '400',
     },
-  }), [C]);
+  }), [C, task.date]);
 
   return (
     <View
@@ -184,15 +451,12 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
         />
       </View>
 
-      {/* DUE DATE */}
+      {/* DUE DATE — taps to open calendar */}
       <View style={[s.cell, { flex: 2 }]}>
-        <TextInput
-          style={s.cellInput}
-          value={task.date}
-          onChangeText={v => onUpdate(index, 'date', v)}
-          placeholder="MM/DD/YYYY"
-          placeholderTextColor={C.textMuted}
-        />
+        <TouchableOpacity style={s.dateTouchable} onPress={() => onOpenDatePicker(index)} activeOpacity={0.7}>
+          <Text style={s.dateTxt}>{task.date || 'Pick date'}</Text>
+          <Text style={s.calIcon}>📅</Text>
+        </TouchableOpacity>
       </View>
 
       {/* NOTES */}
@@ -225,7 +489,7 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
           <Text style={s.pctSymbol}>%</Text>
         </View>
         <View style={s.miniBarTrack}>
-          <View style={[s.miniBarFill, { flex: pct, backgroundColor: color }]} />
+          <View style={[{ flex: pct, height: '100%', borderRadius: 99, backgroundColor: color }]} />
           <View style={{ flex: Math.max(0, 100 - pct) }} />
         </View>
       </View>
@@ -233,7 +497,7 @@ function TaskRow({ task, index, isAlt, onUpdate, onDelete }) {
       {/* DELETE */}
       <View style={[s.deleteCell, { flex: 0.5 }]}>
         <TouchableOpacity onPress={() => onDelete(index)} hitSlop={12}>
-          <Text style={s.deleteTxt}>X</Text>
+          <Text style={s.deleteTxt}>×</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -248,7 +512,12 @@ export default function TaskTrackerPage() {
   const [editingWeek, setEditingWeek] = useState(false);
   const [weekInput,   setWeekInput]   = useState('6');
 
+  // Date picker state
+  const [datePickerIdx,     setDatePickerIdx]     = useState(null); // task index
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+
   const tasks = weeks[week] || [];
+  const done  = tasks.filter(t => (Number(t.completion) || 0) >= 100).length;
   const avg   = tasks.length
     ? Math.round(tasks.reduce((a, t) => a + (Number(t.completion) || 0), 0) / tasks.length)
     : 0;
@@ -295,17 +564,24 @@ export default function TaskTrackerPage() {
     setEditingWeek(false);
   };
 
+  const openDatePicker = (idx) => {
+    setDatePickerIdx(idx);
+    setDatePickerVisible(true);
+  };
+  const closeDatePicker = () => setDatePickerVisible(false);
+  const handleDateSelect = (dateStr) => {
+    if (datePickerIdx !== null) updateTask(datePickerIdx, 'date', dateStr);
+    closeDatePicker();
+  };
+
   const s = useMemo(() => StyleSheet.create({
-    root: {
-      flex: 1,
-      backgroundColor: C.bg,
-    },
+    root: { flex: 1, backgroundColor: C.bg },
     statsStrip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
       paddingHorizontal: 20,
-      paddingVertical: 10,
+      paddingVertical: 11,
       backgroundColor: C.surface,
       borderBottomWidth: 1,
       borderBottomColor: C.border,
@@ -314,8 +590,8 @@ export default function TaskTrackerPage() {
       fontSize: 9,
       fontWeight: '700',
       color: C.textMuted,
-      letterSpacing: 1.2,
-      minWidth: 110,
+      letterSpacing: 1.3,
+      minWidth: 130,
     },
     statsBarTrack: {
       flex: 1,
@@ -369,7 +645,7 @@ export default function TaskTrackerPage() {
       borderLeftWidth: 1,
       borderRightWidth: 1,
       borderColor: C.border,
-      minWidth: 70,
+      minWidth: 72,
       textAlign: 'center',
     },
     weekInput: {
@@ -381,7 +657,7 @@ export default function TaskTrackerPage() {
       borderLeftWidth: 1,
       borderRightWidth: 1,
       borderColor: C.primary,
-      minWidth: 70,
+      minWidth: 72,
       textAlign: 'center',
       backgroundColor: C.surface2,
     },
@@ -392,13 +668,17 @@ export default function TaskTrackerPage() {
       textAlign: 'right',
     },
     addBtn: {
-      backgroundColor: C.primary,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
       borderRadius: 8,
+      borderWidth: 1,
+      borderColor: C.primary,
       paddingHorizontal: 14,
-      paddingVertical: 8,
+      paddingVertical: 7,
     },
     addBtnTxt: {
-      color: '#fff',
+      color: C.primary,
       fontWeight: '700',
       fontSize: 12,
       letterSpacing: 0.6,
@@ -415,10 +695,10 @@ export default function TaskTrackerPage() {
       paddingVertical: 60,
     },
     emptyTitle: {
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '700',
       color: C.textMuted,
-      letterSpacing: 1.2,
+      letterSpacing: 1,
       marginBottom: 8,
     },
     emptySub: {
@@ -430,9 +710,17 @@ export default function TaskTrackerPage() {
   return (
     <View style={s.root}>
 
+      {/* Date picker modal */}
+      <DatePickerModal
+        visible={datePickerVisible}
+        currentValue={datePickerIdx !== null ? (tasks[datePickerIdx]?.date ?? '') : ''}
+        onSelect={handleDateSelect}
+        onClose={closeDatePicker}
+      />
+
       {/* Stats strip */}
       <View style={s.statsStrip}>
-        <Text style={s.statsLabel}>WEEK {week} OVERALL</Text>
+        <Text style={s.statsLabel}>WEEK {week} · {done}/{tasks.length} DONE</Text>
         <View style={s.statsBarTrack}>
           <View style={[{ flex: avg, height: '100%', borderRadius: 99, backgroundColor: pctColor(avg) }]} />
           <View style={{ flex: Math.max(0, 100 - avg) }} />
@@ -475,11 +763,12 @@ export default function TaskTrackerPage() {
         </Text>
 
         <TouchableOpacity style={s.addBtn} onPress={addTask} activeOpacity={0.8}>
-          <Text style={s.addBtnTxt}>+ ADD TASK</Text>
+          <Text style={{ color: C.primary, fontWeight: '700', fontSize: 14 }}>+</Text>
+          <Text style={s.addBtnTxt}>ADD TASK</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Table — no horizontal ScrollView, fills full width */}
+      {/* Table */}
       {tasks.length === 0 ? (
         <View style={s.empty}>
           <Text style={s.emptyTitle}>NO TASKS FOR THIS WEEK</Text>
@@ -501,6 +790,7 @@ export default function TaskTrackerPage() {
                 isAlt={i % 2 === 1}
                 onUpdate={updateTask}
                 onDelete={deleteTask}
+                onOpenDatePicker={openDatePicker}
               />
             ))}
           </View>

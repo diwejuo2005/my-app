@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from './shared/ThemeContext';
 import { storage } from './shared/constants';
+import LogoMark from './LogoMark';
 
 export default function ProfileScreen({ onComplete, existingProfile }) {
   const { C } = useTheme();
@@ -52,21 +53,8 @@ export default function ProfileScreen({ onComplete, existingProfile }) {
       paddingHorizontal: 32,
       paddingVertical: 60,
     },
-    badge: {
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: C.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: 'rgba(59,130,246,0.35)',
+    logoWrap: {
       marginBottom: 20,
-    },
-    badgeLetter: {
-      color: '#fff',
-      fontSize: 28,
-      fontWeight: '800',
     },
     title: {
       fontSize: 20,
@@ -153,10 +141,8 @@ export default function ProfileScreen({ onComplete, existingProfile }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={s.badge}>
-          <Text style={s.badgeLetter}>
-            {firstName?.[0]?.toUpperCase() || 'T'}
-          </Text>
+        <View style={s.logoWrap}>
+          <LogoMark size={64} />
         </View>
 
         <Text style={s.title}>TASK TRACKER</Text>

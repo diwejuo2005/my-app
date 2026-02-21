@@ -10,167 +10,157 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { ThemeProvider, useTheme } from './components/shared/ThemeContext';
 import { storage } from './components/shared/constants';
+import LogoMark from './components/LogoMark';
 import TaskTrackerPage from './components/TaskTrackerPage';
 import YearlyGoalsPage from './components/YearlyGoalsPage';
 import CalendarPage from './components/CalendarPage';
 import ProfileScreen from './components/ProfileScreen';
 
-// ─── Static brand header ──────────────────────────────────────────────────────
-function AppHeader({ profile, onEditProfile }) {
-  const { C, isDark, toggleTheme } = useTheme();
-
-  const initial     = profile?.firstName?.[0]?.toUpperCase() ?? 'U';
-  const displayName = [profile?.firstName, profile?.lastName]
-    .filter(Boolean).join(' ').toUpperCase() || 'USER';
-
-  const s = useMemo(() => StyleSheet.create({
-    header: {
-      backgroundColor: '#0a1628', // always dark — brand element
-      paddingTop: Platform.OS === 'ios' ? 54 : Platform.OS === 'android' ? 28 : 20,
-      paddingBottom: 16,
-      paddingHorizontal: 20,
-      position: 'relative',
-    },
-    headerInner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 14,
-    },
-    badge: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: C.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 2,
-      borderColor: 'rgba(59,130,246,0.35)',
-    },
-    badgeText: {
-      color: '#fff',
-      fontWeight: '800',
-      fontSize: 18,
-    },
-    headerTextBlock: {
-      flex: 1,
-    },
-    headerName: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: '#ffffff',       // always white — dark header bg
-      letterSpacing: 0.5,
-    },
-    headerSub: {
-      fontSize: 10,
-      fontWeight: '600',
-      color: '#94a3b8',       // always readable on dark header bg
-      letterSpacing: 1.4,
-      marginTop: 1,
-    },
-    themeToggle: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      backgroundColor: 'rgba(255,255,255,0.08)',
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.15)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    themeToggleTxt: {
-      fontSize: 16,
-    },
-    headerAccentLine: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: 2,
-      backgroundColor: C.accent,
-    },
-  }), [C]);
-
-  return (
-    <View style={s.header}>
-      <View style={s.headerInner}>
-        <View style={s.badge}>
-          <Text style={s.badgeText}>{initial}</Text>
-        </View>
-        <View style={s.headerTextBlock}>
-          <TouchableOpacity onPress={onEditProfile} activeOpacity={0.7}>
-            <Text style={s.headerName}>{displayName}</Text>
-          </TouchableOpacity>
-          <Text style={s.headerSub}>TASK TRACKER</Text>
-        </View>
-        <TouchableOpacity onPress={toggleTheme} style={s.themeToggle} activeOpacity={0.7}>
-          <Text style={s.themeToggleTxt}>{isDark ? '☀' : '☾'}</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={s.headerAccentLine} />
-    </View>
-  );
-}
-
-// ─── Tab bar ──────────────────────────────────────────────────────────────────
+// ─── Tab definitions ──────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'TASKS',    label: 'TASK TRACKER' },
-  { key: 'GOALS',    label: 'YEARLY GOALS' },
-  { key: 'CALENDAR', label: 'CALENDAR' },
+  { key: 'TASKS',    label: 'Tasks'    },
+  { key: 'GOALS',    label: 'Goals'    },
+  { key: 'CALENDAR', label: 'Calendar' },
 ];
 
-function TabBar({ activeTab, onTabChange }) {
-  const { C } = useTheme();
+// ─── Slim Notion-style Navbar ─────────────────────────────────────────────────
+function Navbar({ profile, activeTab, onTabChange, onEditProfile }) {
+  const { C, isDark, toggleTheme } = useTheme();
+
+  const firstName = profile?.firstName ?? '';
+  const initial   = firstName[0]?.toUpperCase() ?? 'U';
+  const appName   = firstName ? `${firstName}'s Tracker` : 'Task Tracker';
 
   const s = useMemo(() => StyleSheet.create({
-    tabBar: {
+    bar: {
       flexDirection: 'row',
+      alignItems: 'center',
+      height: 56,
+      paddingHorizontal: 16,
       backgroundColor: C.surface,
       borderBottomWidth: 1,
       borderBottomColor: C.border,
+      // safe area top pad on iOS
+      paddingTop: Platform.OS === 'ios' ? 44 : 0,
+      height: Platform.OS === 'ios' ? 100 : 56,
     },
-    tabItem: {
+    logoArea: {
       flex: 1,
-      paddingVertical: 13,
+      flexDirection: 'row',
       alignItems: 'center',
+      gap: 9,
+    },
+    appName: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: C.text,
+      letterSpacing: 0.2,
+    },
+    navLinks: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 0,
+    },
+    navItem: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
       position: 'relative',
     },
-    tabLabel: {
-      fontSize: 10,
+    navTxt: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: C.textSec,
+    },
+    navTxtActive: {
+      color: C.primary,
       fontWeight: '700',
-      letterSpacing: 1.2,
-      color: C.textMuted,
     },
-    tabLabelActive: {
-      color: C.accent,
-    },
-    tabActiveLine: {
+    navUnderline: {
       position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
+      bottom: -1,
+      left: 12,
+      right: 12,
       height: 2,
-      backgroundColor: C.accent,
+      borderRadius: 1,
+      backgroundColor: C.primary,
+    },
+    navSep: {
+      width: 1,
+      height: 14,
+      backgroundColor: C.border,
+    },
+    rightArea: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: 8,
+    },
+    themeBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: C.surface2,
+      borderWidth: 1,
+      borderColor: C.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    themeTxt: {
+      fontSize: 14,
+    },
+    avatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: C.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    avatarTxt: {
+      color: '#fff',
+      fontWeight: '800',
+      fontSize: 13,
     },
   }), [C]);
 
   return (
-    <View style={s.tabBar}>
-      {TABS.map(tab => {
-        const active = activeTab === tab.key;
-        return (
-          <TouchableOpacity
-            key={tab.key}
-            style={s.tabItem}
-            onPress={() => onTabChange(tab.key)}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.tabLabel, active && s.tabLabelActive]}>
-              {tab.label}
-            </Text>
-            {active && <View style={s.tabActiveLine} />}
-          </TouchableOpacity>
-        );
-      })}
+    <View style={s.bar}>
+      {/* Left: logo + app name */}
+      <View style={s.logoArea}>
+        <LogoMark size={28} />
+        <Text style={s.appName}>{appName}</Text>
+      </View>
+
+      {/* Center: tab nav links */}
+      <View style={s.navLinks}>
+        {TABS.map((tab, idx) => {
+          const active = activeTab === tab.key;
+          return (
+            <React.Fragment key={tab.key}>
+              {idx > 0 && <View style={s.navSep} />}
+              <TouchableOpacity
+                style={s.navItem}
+                onPress={() => onTabChange(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.navTxt, active && s.navTxtActive]}>{tab.label}</Text>
+                {active && <View style={s.navUnderline} />}
+              </TouchableOpacity>
+            </React.Fragment>
+          );
+        })}
+      </View>
+
+      {/* Right: theme toggle + avatar */}
+      <View style={s.rightArea}>
+        <TouchableOpacity style={s.themeBtn} onPress={toggleTheme} activeOpacity={0.7}>
+          <Text style={s.themeTxt}>{isDark ? '☀' : '☾'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.avatar} onPress={onEditProfile} activeOpacity={0.8}>
+          <Text style={s.avatarTxt}>{initial}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -199,7 +189,7 @@ function AppInner() {
     setProfileStatus('ready');
   };
 
-  // Loading splash — imperceptible but prevents flash
+  // Loading splash
   if (profileStatus === 'loading') {
     return (
       <View style={{ flex: 1, backgroundColor: C.bg }}>
@@ -212,7 +202,7 @@ function AppInner() {
   if (profileStatus === 'none') {
     return (
       <>
-        <StatusBar style="light" />
+        <StatusBar style={isDark ? 'light' : 'dark'} />
         <ProfileScreen
           onComplete={handleProfileComplete}
           existingProfile={profile}
@@ -228,11 +218,13 @@ function AppInner() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <AppHeader
+
+      <Navbar
         profile={profile}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
         onEditProfile={() => setProfileStatus('none')}
       />
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
       {activeTab === 'TASKS'    && <TaskTrackerPage />}
       {activeTab === 'GOALS'    && <YearlyGoalsPage />}
