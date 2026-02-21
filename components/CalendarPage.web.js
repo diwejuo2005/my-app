@@ -1,31 +1,47 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { C } from './shared/constants';
+import { useTheme } from './shared/ThemeContext';
+import { storage } from './shared/constants';
 
-// showNav=1 enables Google's built-in prev/next week arrows inside the embed
-const CALENDAR_URL =
-  'https://calendar.google.com/calendar/embed' +
-  '?src=donaldiwejuo%40gmail.com' +
-  '&ctz=America%2FNew_York' +
-  '&mode=WEEK' +
-  '&showNav=1' +
-  '&showTitle=0' +
-  '&showPrint=0' +
-  '&showTabs=1' +
-  '&showCalendars=0' +
-  '&showTz=0';
+function buildCalendarUrl(email) {
+  const base = 'https://calendar.google.com/calendar/embed';
+  const src   = email ? `&src=${encodeURIComponent(email)}` : '';
+  return (
+    base + '?' +
+    'mode=WEEK' +
+    src +
+    '&ctz=America%2FNew_York' +
+    '&showNav=1' +
+    '&showTitle=0' +
+    '&showPrint=0' +
+    '&showTabs=1' +
+    '&showCalendars=0' +
+    '&showTz=0'
+  );
+}
 
 export default function CalendarPage() {
-  const containerRef = useRef(null);
+  const { C } = useTheme();
+  const containerRef   = useRef(null);
+  const [calendarEmail, setCalendarEmail] = useState(undefined); // undefined = still loading
 
+  // Load profile email first
   useEffect(() => {
+    storage.get('userProfile').then(p => {
+      setCalendarEmail(p?.email ?? '');
+    });
+  }, []);
+
+  // Mount iframe only after email is resolved; re-mount if email changes
+  useEffect(() => {
+    if (calendarEmail === undefined) return;
     const container = containerRef.current;
     if (!container) return;
 
     const iframe = document.createElement('iframe');
-    iframe.src = CALENDAR_URL;
+    iframe.src   = buildCalendarUrl(calendarEmail);
     iframe.title = 'Google Calendar';
-    iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;background:#070d1a;';
+    iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
     container.appendChild(iframe);
 
     return () => {
@@ -33,47 +49,35 @@ export default function CalendarPage() {
         container.removeChild(iframe);
       }
     };
-  }, []);
+  }, [calendarEmail]);
+
+  const s = useMemo(() => StyleSheet.create({
+    root: { flex: 1, backgroundColor: C.bg },
+    pageHeader: {
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: C.border,
+      backgroundColor: C.surface,
+    },
+    pageTitle: { fontSize: 11, fontWeight: '700', color: C.text, letterSpacing: 1.4 },
+    pageSub:   { fontSize: 11, color: C.textMuted, marginTop: 3, lineHeight: 16 },
+    iframeContainer: { flex: 1 },
+  }), [C]);
 
   return (
     <View style={s.root}>
       <View style={s.pageHeader}>
         <Text style={s.pageTitle}>CALENDAR</Text>
         <Text style={s.pageSub}>
-          Use the arrows inside the calendar to navigate between weeks.
-          You must be signed into Google in your browser.
+          {calendarEmail
+            ? `Showing calendar for ${calendarEmail}. Make sure you are signed into Google in this browser.`
+            : calendarEmail === ''
+              ? 'No Gmail address set. Tap your name in the header to edit your profile.'
+              : 'Loading...'}
         </Text>
       </View>
       <View style={s.iframeContainer} ref={containerRef} />
     </View>
   );
 }
-
-const s = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
-  pageHeader: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.border,
-    backgroundColor: C.surface,
-  },
-  pageTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.text,
-    letterSpacing: 1.4,
-  },
-  pageSub: {
-    fontSize: 11,
-    color: C.textMuted,
-    marginTop: 3,
-    lineHeight: 16,
-  },
-  iframeContainer: {
-    flex: 1,
-  },
-});
