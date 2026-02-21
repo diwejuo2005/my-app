@@ -31,7 +31,8 @@ function AppInner() {
   // per-user prefix, then read user-specific data so keys are correct.
   useEffect(() => {
     storage.get('userProfile').then(p => {
-      const validProfile = p?.firstName ? p : null;
+      // Require both firstName AND email — old profiles without email are invalid
+      const validProfile = (p?.firstName && p?.email) ? p : null;
 
       // Restore the per-user storage prefix for returning users
       if (validProfile?.email) {
