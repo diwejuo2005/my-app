@@ -703,6 +703,53 @@
       text-align: center;
     }
 
+    .live-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #fca5a5;
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.35);
+      padding: 2px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 6px #ef4444;
+      animation: liveBlink 1.6s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    .live-dot.refreshing {
+      background: #22c55e;
+      box-shadow: 0 0 8px #22c55e;
+      animation: liveBlink 0.6s ease-in-out infinite;
+    }
+
+    @keyframes liveBlink {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.85); }
+    }
+
+    .news-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-size: 10.5px;
+      color: rgba(255,255,255,0.4);
+      padding: 8px 0 2px;
+      letter-spacing: 0.2px;
+    }
+
     /* ── Responsive ── */
     @media (max-width: 640px) {
       .header { padding: 16px 20px; }
@@ -936,17 +983,47 @@ function NewsItem({ article }) {
 function NewsWidget({ member }) {
   const [expanded, setExpanded] = useState(false);
   const [articles, setArticles] = useState(null); // null = loading, [] = empty/error
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [, forceTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    fetchNewsForMember(member)
-      .then(items => { if (!cancelled) setArticles(items); })
-      .catch(() => { if (!cancelled) setArticles([]); });
-    return () => { cancelled = true; };
+
+    const load = async () => {
+      setRefreshing(true);
+      try {
+        const items = await fetchNewsForMember(member);
+        if (!cancelled) {
+          setArticles(items);
+          setLastUpdate(Date.now());
+        }
+      } catch {
+        if (!cancelled && articles === null) setArticles([]);
+      } finally {
+        if (!cancelled) setRefreshing(false);
+      }
+    };
+
+    load();
+    // Live polling — refresh headlines every 90 seconds
+    const poll = setInterval(load, 90 * 1000);
+    // Tick once per second to keep the "last updated" label fresh
+    const tick = setInterval(() => forceTick(t => t + 1), 1000);
+
+    return () => { cancelled = true; clearInterval(poll); clearInterval(tick); };
   }, [member.id]);
 
   const criticalCount = articles ? articles.filter(a => a.level === 'critical').length : 0;
   const importantCount = articles ? articles.filter(a => a.level === 'important').length : 0;
+
+  const updatedLabel = lastUpdate ? (() => {
+    const sec = Math.round((Date.now() - lastUpdate) / 1000);
+    if (sec < 5) return 'just now';
+    if (sec < 60) return `${sec}s ago`;
+    if (sec < 3600) return `${Math.round(sec / 60)}m ago`;
+    return `${Math.round(sec / 3600)}h ago`;
+  })() : null;
 
   return (
     <div style={{ marginTop: '14px' }}>
@@ -955,7 +1032,10 @@ function NewsWidget({ member }) {
         <div className="news-toggle-left">
           <span>📰</span>
           <span>News from {member.city}</span>
-          {articles === null && <span style={{fontSize:'11px',opacity:0.45}}>loading…</span>}
+          <span className="live-indicator">
+            <span className={`live-dot${refreshing ? ' refreshing' : ''}`} />
+            LIVE
+          </span>
           {criticalCount > 0 && (
             <span className="news-badge-critical">⚠ {criticalCount} Alert{criticalCount !== 1 ? 's' : ''}</span>
           )}
@@ -970,7 +1050,13 @@ function NewsWidget({ member }) {
         <div className="news-list">
           {articles === null && <div className="news-status">Fetching headlines…</div>}
           {articles !== null && articles.length === 0 && <div className="news-status">No recent headlines found</div>}
-          {articles !== null && articles.slice(0, 5).map((a, i) => <NewsItem key={i} article={a} />)}
+          {articles !== null && articles.slice(0, 5).map((a, i) => <NewsItem key={a.link || i} article={a} />)}
+          {updatedLabel && articles !== null && articles.length > 0 && (
+            <div className="news-footer">
+              <span className={`live-dot${refreshing ? ' refreshing' : ''}`} />
+              {refreshing ? 'Refreshing…' : `Updated ${updatedLabel} · auto-refreshes every 90s`}
+            </div>
+          )}
         </div>
       )}
     </div>
