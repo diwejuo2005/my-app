@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ensemble – Everyone You Love, At a Glance</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #07080f;
+      --surface: rgba(255,255,255,0.045);
+      --border: rgba(255,255,255,0.08);
+      --text: #f0f0f6;
+      --muted: rgba(240,240,246,0.45);
+      --accent: #7c6af7;
+      --accent-glow: rgba(124,106,247,0.35);
+      --radius-lg: 22px;
+      --radius-md: 14px;
+      --radius-sm: 9px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(124,106,247,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124,106,247,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    #root { position: relative; z-index: 1; }
+
+    /* ── Header ── */
+    .header {
+      padding: 20px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(7,8,15,0.82);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-mark {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #7c6af7, #b06af7);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      box-shadow: 0 0 20px var(--accent-glow);
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-tagline {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+      margin-left: 2px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #7c6af7, #9b6af7);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 20px var(--accent-glow);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 24px var(--accent-glow);
+    }
+
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+
+    .btn-secondary:hover { background: rgba(255,255,255,0.08); }
+
+    /* ── Main layout ── */
+    .main {
+      padding: 40px 32px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+    }
+
+    .member-count {
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+
+    /* ── Card Grid ── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+    }
+
+    /* ── Family Card ── */
+    .family-card {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      position: relative;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .family-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .card-gradient {
+      padding: 26px;
+      position: relative;
+    }
+
+    .card-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.22);
+    }
+
+    .card-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .card-person {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .card-emoji {
+      font-size: 44px;
+      line-height: 1;
+      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+    }
+
+    .card-name {
+      font-size: 22px;
+      font-weight: 700;
+      color: white;
+      letter-spacing: -0.3px;
+    }
+
+    .card-relation {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.7);
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(4px);
+      padding: 2px 9px;
+      border-radius: 20px;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .card-remove {
+      background: none;
+      border: none;
+      color: rgba(255,255,255,0.35);
+      cursor: pointer;
+      font-size: 20px;
+      padding: 2px 6px;
+      border-radius: 6px;
+      transition: color 0.15s;
+      line-height: 1;
+    }
+
+    .card-remove:hover { color: rgba(255,255,255,0.7); }
+
+    .card-location {
+      font-size: 12px;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-time {
+      font-size: 46px;
+      font-weight: 800;
+      color: white;
+      letter-spacing: -2px;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .card-date {
+      font-size: 13px;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 20px;
+    }
+
+    .card-weather {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 12px 16px;
+      border-radius: var(--radius-md);
+      margin-bottom: 12px;
+    }
+
+    .weather-icon { font-size: 30px; line-height: 1; }
+
+    .weather-temp {
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+      line-height: 1;
+    }
+
+    .weather-label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      margin-top: 2px;
+    }
+
+    .weather-alert {
+      margin-left: auto;
+      background: rgba(239,68,68,0.25);
+      border: 1px solid rgba(239,68,68,0.5);
+      color: #fca5a5;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .card-call-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 11px 16px;
+      border-radius: var(--radius-md);
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .status-dot.good { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
+    .status-dot.maybe { background: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
+    .status-dot.no { background: #6b7280; }
+
+    .status-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.85);
+    }
+
+    .weather-loading {
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 12px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.06);
+      border-radius: var(--radius-md);
+    }
+
+    /* ── Empty State ── */
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--muted);
+      grid-column: 1 / -1;
+    }
+
+    .empty-state-icon { font-size: 56px; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+    .empty-state p { font-size: 14px; max-width: 320px; margin: 0 auto 24px; }
+
+    /* ── Modal ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal {
+      background: #12131f;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+    }
+
+    .modal-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.3px;
+    }
+
+    .modal-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+
+    .form-group { margin-bottom: 18px; }
+
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 7px;
+    }
+
+    .form-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 15px;
+      padding: 11px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .form-input:focus { border-color: var(--accent); }
+    .form-input::placeholder { color: var(--muted); }
+
+    .form-select {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 15px;
+      padding: 11px 14px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+    }
+
+    .form-select option { background: #12131f; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    .city-search-row { display: flex; gap: 10px; }
+    .city-search-row .form-input { flex: 1; }
+
+    .btn-search {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 11px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+
+    .btn-search:hover { background: rgba(255,255,255,0.1); }
+    .btn-search:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .city-result {
+      font-size: 12px;
+      color: #86efac;
+      margin-top: 6px;
+      padding: 6px 10px;
+      background: rgba(34,197,94,0.1);
+      border-radius: 6px;
+      border: 1px solid rgba(34,197,94,0.2);
+    }
+
+    .city-error {
+      font-size: 12px;
+      color: #fca5a5;
+      margin-top: 6px;
+      padding: 6px 10px;
+      background: rgba(239,68,68,0.1);
+      border-radius: 6px;
+      border: 1px solid rgba(239,68,68,0.2);
+    }
+
+    .emoji-picker {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .emoji-option {
+      font-size: 28px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 8px;
+      border: 2px solid transparent;
+      transition: all 0.15s;
+      background: none;
+      line-height: 1;
+    }
+
+    .emoji-option:hover { background: rgba(255,255,255,0.08); }
+    .emoji-option.selected { border-color: var(--accent); background: rgba(124,106,247,0.15); }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .modal-actions .btn-primary { flex: 1; justify-content: center; }
+    .modal-actions .btn-secondary { flex: 1; text-align: center; }
+
+    /* ── Share Link Banner ── */
+    .share-banner {
+      background: linear-gradient(135deg, rgba(124,106,247,0.12), rgba(176,106,247,0.12));
+      border: 1px solid rgba(124,106,247,0.25);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .share-banner-icon { font-size: 24px; }
+
+    .share-banner-text h4 { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .share-banner-text p { font-size: 12px; color: var(--muted); }
+
+    .share-link {
+      margin-left: auto;
+      flex-shrink: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      cursor: pointer;
+      background: rgba(124,106,247,0.15);
+      border: 1px solid rgba(124,106,247,0.3);
+      padding: 6px 12px;
+      border-radius: 6px;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+
+    .share-link:hover { background: rgba(124,106,247,0.25); }
+
+    /* ── Copied toast ── */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #22c55e;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 24px;
+      border-radius: 50px;
+      box-shadow: 0 8px 32px rgba(34,197,94,0.35);
+      z-index: 999;
+      animation: toastIn 0.3s ease;
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .header { padding: 16px 20px; }
+      .logo-tagline { display: none; }
+      .main { padding: 24px 16px; }
+      .card-grid { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const EMOJIS = ['👩','👨','👴','👵','🧑','👧','👦','👩‍💼','👨‍💼','🧒','🙋','🤷'];
+
+const RELATIONSHIPS = [
+  'Mother','Father','Grandmother','Grandfather','Sibling',
+  'Partner','Friend','Aunt','Uncle','Cousin','Roommate','Other'
+];
+
+const INITIAL_MEMBERS = [
+  {
+    id: 1, name: 'Mom', relationship: 'Mother', emoji: '👩',
+    city: 'New York', country: 'US', timezone: 'America/New_York',
+    lat: 40.7128, lon: -74.0060, wakeHour: 7, sleepHour: 22,
+  },
+  {
+    id: 2, name: 'Dad', relationship: 'Father', emoji: '👨',
+    city: 'Chicago', country: 'US', timezone: 'America/Chicago',
+    lat: 41.8781, lon: -87.6298, wakeHour: 6, sleepHour: 21,
+  },
+  {
+    id: 3, name: 'Nani', relationship: 'Grandmother', emoji: '👵',
+    city: 'Mumbai', country: 'IN', timezone: 'Asia/Kolkata',
+    lat: 19.0760, lon: 72.8777, wakeHour: 5, sleepHour: 21,
+  },
+  {
+    id: 4, name: 'Alex', relationship: 'Sibling', emoji: '🧑',
+    city: 'London', country: 'GB', timezone: 'Europe/London',
+    lat: 51.5074, lon: -0.1278, wakeHour: 8, sleepHour: 23,
+  },
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function weatherCodeInfo(code) {
+  if (code === 0) return { icon: '☀️', label: 'Clear sky', severe: false };
+  if (code === 1) return { icon: '🌤️', label: 'Mainly clear', severe: false };
+  if (code === 2) return { icon: '⛅', label: 'Partly cloudy', severe: false };
+  if (code === 3) return { icon: '☁️', label: 'Overcast', severe: false };
+  if ([45,48].includes(code)) return { icon: '🌫️', label: 'Foggy', severe: false };
+  if ([51,53].includes(code)) return { icon: '🌦️', label: 'Light drizzle', severe: false };
+  if (code === 55) return { icon: '🌧️', label: 'Heavy drizzle', severe: false };
+  if ([61,63].includes(code)) return { icon: '🌧️', label: 'Rain', severe: false };
+  if (code === 65) return { icon: '🌧️', label: 'Heavy rain', severe: true };
+  if ([71,73].includes(code)) return { icon: '❄️', label: 'Snow', severe: false };
+  if (code === 75) return { icon: '❄️', label: 'Heavy snow', severe: true };
+  if (code === 77) return { icon: '🌨️', label: 'Snow grains', severe: false };
+  if ([80,81].includes(code)) return { icon: '🌦️', label: 'Rain showers', severe: false };
+  if (code === 82) return { icon: '⛈️', label: 'Violent showers', severe: true };
+  if (code === 85) return { icon: '🌨️', label: 'Snow showers', severe: false };
+  if (code === 86) return { icon: '🌨️', label: 'Heavy snow showers', severe: true };
+  if (code === 95) return { icon: '⛈️', label: 'Thunderstorm', severe: true };
+  if ([96,99].includes(code)) return { icon: '⛈️', label: 'Severe thunderstorm', severe: true };
+  return { icon: '🌡️', label: 'Unknown', severe: false };
+}
+
+function getCallStatus(timezone, wakeHour, sleepHour) {
+  const now = new Date();
+  const localStr = now.toLocaleString('en-US', { timeZone: timezone, hour: 'numeric', minute: '2-digit', hour12: false });
+  const [h, m] = localStr.split(':').map(Number);
+  const t = h + m / 60;
+
+  if (t >= wakeHour + 1 && t < sleepHour - 1) {
+    return { key: 'good', label: 'Good time to call', icon: '✓' };
+  }
+  if ((t >= wakeHour && t < wakeHour + 1) || (t >= sleepHour - 1 && t < sleepHour)) {
+    return { key: 'maybe', label: 'Catching up / winding down', icon: '~' };
+  }
+  return { key: 'no', label: 'Probably sleeping', icon: '🌙' };
+}
+
+function getTimeOfDay(timezone) {
+  const now = new Date();
+  const localStr = now.toLocaleString('en-US', { timeZone: timezone, hour: 'numeric', hour12: false });
+  const h = parseInt(localStr);
+  if (h >= 5 && h < 8) return 'dawn';
+  if (h >= 8 && h < 12) return 'morning';
+  if (h >= 12 && h < 17) return 'afternoon';
+  if (h >= 17 && h < 20) return 'evening';
+  if (h >= 20 && h < 22) return 'late-evening';
+  return 'night';
+}
+
+const GRADIENTS = {
+  'night':        'linear-gradient(150deg, #0d1b2a 0%, #1b2838 50%, #16213e 100%)',
+  'dawn':         'linear-gradient(150deg, #7b2d8b 0%, #c0392b 60%, #e67e22 100%)',
+  'morning':      'linear-gradient(150deg, #1a6194 0%, #2980b9 50%, #1abc9c 100%)',
+  'afternoon':    'linear-gradient(150deg, #155799 0%, #159957 100%)',
+  'evening':      'linear-gradient(150deg, #4a148c 0%, #7b1fa2 50%, #880e4f 100%)',
+  'late-evening': 'linear-gradient(150deg, #1a237e 0%, #283593 50%, #311b92 100%)',
+};
+
+async function fetchWeather(lat, lon, country) {
+  const unit = (country === 'US') ? 'fahrenheit' : 'celsius';
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=${unit}&wind_speed_unit=mph`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Weather fetch failed');
+  const data = await res.json();
+  const c = data.current;
+  return {
+    temp: Math.round(c.temperature_2m),
+    unit: unit === 'fahrenheit' ? '°F' : '°C',
+    code: c.weather_code,
+    wind: Math.round(c.wind_speed_10m),
+    ...weatherCodeInfo(c.weather_code),
+  };
+}
+
+async function geocodeCity(query) {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Geocoding failed');
+  const data = await res.json();
+  if (!data.results || data.results.length === 0) throw new Error('City not found');
+  const r = data.results[0];
+  return {
+    city: r.name,
+    country: r.country_code,
+    timezone: r.timezone,
+    lat: r.latitude,
+    lon: r.longitude,
+    display: `${r.name}, ${r.country}`,
+  };
+}
+
+// ── WeatherWidget ──────────────────────────────────────────────────────────
+
+function WeatherWidget({ member }) {
+  const [weather, setWeather] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    fetchWeather(member.lat, member.lon, member.country)
+      .then(w => { if (!cancelled) { setWeather(w); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setWeather(null); setLoading(false); } });
+
+    const timer = setInterval(() => {
+      fetchWeather(member.lat, member.lon, member.country)
+        .then(w => { if (!cancelled) setWeather(w); })
+        .catch(() => {});
+    }, 10 * 60 * 1000);
+
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [member.id]);
+
+  if (loading) return <div className="weather-loading">Fetching weather…</div>;
+  if (!weather) return <div className="weather-loading">Weather unavailable</div>;
+
+  return (
+    <div className="card-weather">
+      <span className="weather-icon">{weather.icon}</span>
+      <div>
+        <div className="weather-temp">{weather.temp}{weather.unit}</div>
+        <div className="weather-label">{weather.label}</div>
+      </div>
+      {weather.severe && (
+        <div className="weather-alert">⚠ Weather Alert</div>
+      )}
+    </div>
+  );
+}
+
+// ── FamilyCard ─────────────────────────────────────────────────────────────
+
+function FamilyCard({ member, onRemove, tick }) {
+  const now = new Date();
+
+  const timeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: member.timezone, hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(now);
+
+  const dateStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: member.timezone, weekday: 'long', month: 'short', day: 'numeric',
+  }).format(now);
+
+  const tod = getTimeOfDay(member.timezone);
+  const gradient = GRADIENTS[tod];
+  const call = getCallStatus(member.timezone, member.wakeHour, member.sleepHour);
+
+  return (
+    <div className="family-card">
+      <div className="card-gradient" style={{ background: gradient }}>
+        <div className="card-overlay" />
+        <div className="card-content">
+          <div className="card-header">
+            <div className="card-person">
+              <span className="card-emoji">{member.emoji}</span>
+              <div>
+                <div className="card-name">{member.name}</div>
+                <span className="card-relation">{member.relationship}</span>
+              </div>
+            </div>
+            <button className="card-remove" onClick={() => onRemove(member.id)} title="Remove">×</button>
+          </div>
+
+          <div className="card-location">📍 {member.city}, {member.country}</div>
+
+          <div className="card-time">{timeStr}</div>
+          <div className="card-date">{dateStr}</div>
+
+          <WeatherWidget member={member} />
+
+          <div className="card-call-status">
+            <div className={`status-dot ${call.key}`} />
+            <span className="status-text">{call.label}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AddMemberModal ─────────────────────────────────────────────────────────
+
+function AddMemberModal({ onClose, onAdd }) {
+  const [form, setForm] = useState({
+    name: '', relationship: 'Mother', emoji: '👩',
+    cityQuery: '', wakeHour: 7, sleepHour: 22,
+  });
+  const [cityResult, setCityResult] = useState(null);
+  const [cityError, setCityError] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  function set(key, val) { setForm(f => ({ ...f, [key]: val })); }
+
+  async function handleCitySearch() {
+    if (!form.cityQuery.trim()) return;
+    setSearching(true);
+    setCityError('');
+    setCityResult(null);
+    try {
+      const result = await geocodeCity(form.cityQuery);
+      setCityResult(result);
+    } catch (e) {
+      setCityError('City not found. Try a different spelling.');
+    }
+    setSearching(false);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === 'Enter') handleCitySearch();
+  }
+
+  function handleAdd() {
+    if (!form.name.trim() || !cityResult) return;
+    setSubmitting(true);
+    onAdd({
+      id: Date.now(),
+      name: form.name.trim(),
+      relationship: form.relationship,
+      emoji: form.emoji,
+      city: cityResult.city,
+      country: cityResult.country,
+      timezone: cityResult.timezone,
+      lat: cityResult.lat,
+      lon: cityResult.lon,
+      wakeHour: Number(form.wakeHour),
+      sleepHour: Number(form.sleepHour),
+    });
+  }
+
+  const canSubmit = form.name.trim() && cityResult;
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">Add a loved one 💜</div>
+        <div className="modal-subtitle">Their info stays on your device — nothing is shared without them.</div>
+
+        <div className="form-group">
+          <label className="form-label">Pick an emoji</label>
+          <div className="emoji-picker">
+            {EMOJIS.map(e => (
+              <button
+                key={e}
+                className={`emoji-option${form.emoji === e ? ' selected' : ''}`}
+                onClick={() => set('emoji', e)}
+              >{e}</button>
+            ))}
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Name</label>
+            <input
+              className="form-input"
+              placeholder="Mom, Alex, Nani…"
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Relationship</label>
+            <select className="form-select" value={form.relationship} onChange={e => set('relationship', e.target.value)}>
+              {RELATIONSHIPS.map(r => <option key={r}>{r}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Their city</label>
+          <div className="city-search-row">
+            <input
+              className="form-input"
+              placeholder="Search a city…"
+              value={form.cityQuery}
+              onChange={e => { set('cityQuery', e.target.value); setCityResult(null); setCityError(''); }}
+              onKeyDown={handleKeyDown}
+            />
+            <button className="btn-search" onClick={handleCitySearch} disabled={searching || !form.cityQuery.trim()}>
+              {searching ? '…' : 'Search'}
+            </button>
+          </div>
+          {cityResult && <div className="city-result">✓ {cityResult.display} · {cityResult.timezone}</div>}
+          {cityError && <div className="city-error">{cityError}</div>}
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">Usually wakes at</label>
+            <select className="form-select" value={form.wakeHour} onChange={e => set('wakeHour', e.target.value)}>
+              {Array.from({length:12},(_,i)=>i+4).map(h=>(
+                <option key={h} value={h}>
+                  {h < 12 ? `${h}:00 AM` : `${h}:00 PM`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Usually sleeps at</label>
+            <select className="form-select" value={form.sleepHour} onChange={e => set('sleepHour', e.target.value)}>
+              {Array.from({length:8},(_,i)=>i+18).map(h=>(
+                <option key={h} value={h}>
+                  {h < 24 ? `${h-12||12}:00 ${h<12?'AM':'PM'}` : '12:00 AM'}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button
+            className="btn-primary"
+            onClick={handleAdd}
+            disabled={!canSubmit || submitting}
+            style={{ opacity: canSubmit ? 1 : 0.5 }}
+          >
+            Add to Ensemble
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── App ────────────────────────────────────────────────────────────────────
+
+function App() {
+  const [members, setMembers] = useState(INITIAL_MEMBERS);
+  const [showModal, setShowModal] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [toast, setToast] = useState(false);
+
+  // Tick every second to update clocks
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  function handleAdd(member) {
+    setMembers(m => [...m, member]);
+    setShowModal(false);
+  }
+
+  function handleRemove(id) {
+    setMembers(m => m.filter(x => x.id !== id));
+  }
+
+  function handleShareLink() {
+    const fakeLink = `https://ensemble.app/join?ref=abc123`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(fakeLink).then(() => {
+        setToast(true);
+        setTimeout(() => setToast(false), 2500);
+      });
+    }
+  }
+
+  return (
+    <>
+      <div className="header">
+        <div className="logo">
+          <div className="logo-mark">🎵</div>
+          <div>
+            <div className="logo-text">Ensemble</div>
+            <div className="logo-tagline">Everyone you love, at a glance</div>
+          </div>
+        </div>
+        <button className="btn-primary" onClick={() => setShowModal(true)}>
+          <span>＋</span> Add person
+        </button>
+      </div>
+
+      <div className="main">
+        <div className="share-banner">
+          <span className="share-banner-icon">🔗</span>
+          <div className="share-banner-text">
+            <h4>Invite a family member</h4>
+            <p>Share a link — they tap once and you're connected. No app download needed.</p>
+          </div>
+          <span className="share-link" onClick={handleShareLink}>Copy invite link</span>
+        </div>
+
+        <div className="section-header">
+          <span className="section-title">Your people</span>
+          <span className="member-count">{members.length} connected</span>
+        </div>
+
+        <div className="card-grid">
+          {members.length === 0 && (
+            <div className="empty-state">
+              <div className="empty-state-icon">🌍</div>
+              <h3>No one here yet</h3>
+              <p>Add the people you love to see their time, weather, and when's best to call.</p>
+              <button className="btn-primary" style={{margin:'0 auto',display:'flex'}} onClick={() => setShowModal(true)}>
+                Add your first person
+              </button>
+            </div>
+          )}
+          {members.map(m => (
+            <FamilyCard key={m.id} member={m} onRemove={handleRemove} tick={tick} />
+          ))}
+        </div>
+      </div>
+
+      {showModal && <AddMemberModal onClose={() => setShowModal(false)} onAdd={handleAdd} />}
+      {toast && <div className="toast">📋 Invite link copied!</div>}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
