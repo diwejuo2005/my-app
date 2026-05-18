@@ -675,10 +675,30 @@
       border-color: rgba(245,158,11,0.15);
     }
 
+    .news-item-inner {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .news-item-body { flex: 1; min-width: 0; }
+
+    .news-item-section {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 4px;
+    }
+
+    .news-item.critical .news-item-section { color: rgba(252,165,165,0.6); }
+    .news-item.important .news-item-section { color: rgba(253,230,138,0.6); }
+
     .news-item-title {
-      font-size: 12px;
-      font-weight: 500;
-      color: rgba(255,255,255,0.88);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.92);
       line-height: 1.45;
       margin-bottom: 5px;
     }
@@ -686,12 +706,35 @@
     .news-item.critical .news-item-title { color: #fca5a5; }
     .news-item.important .news-item-title { color: #fde68a; }
 
+    .news-item-desc {
+      font-size: 11px;
+      color: rgba(255,255,255,0.45);
+      line-height: 1.4;
+      margin-bottom: 6px;
+    }
+
     .news-item-meta {
       display: flex;
       align-items: center;
       gap: 5px;
       font-size: 11px;
       color: rgba(255,255,255,0.38);
+    }
+
+    .news-source-tag {
+      font-size: 10px;
+      font-weight: 700;
+      color: #a78bfa;
+      letter-spacing: 0.2px;
+    }
+
+    .news-item-thumb {
+      width: 62px;
+      height: 62px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+      opacity: 0.85;
     }
 
     .news-dot { width: 2px; height: 2px; border-radius: 50%; background: rgba(255,255,255,0.28); flex-shrink: 0; }
@@ -924,40 +967,34 @@ function classifyArticle(title, desc) {
 
 function timeAgo(dateStr) {
   if (!dateStr) return '';
-  const date = new Date(dateStr.replace(' ', 'T'));
+  const date = new Date(dateStr);
   const diff = (Date.now() - date.getTime()) / 1000;
   if (isNaN(diff) || diff < 0) return 'just now';
-  if (diff < 3600) return `${Math.max(1, Math.round(diff / 60))}m ago`;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
   return `${Math.round(diff / 86400)}d ago`;
 }
 
 async function fetchNewsForMember(member) {
-  const q = encodeURIComponent(`${member.city} ${member.country}`);
-  const rssUrl = encodeURIComponent(
-    `https://news.google.com/rss/search?q=${q}&hl=en&gl=${member.country}&ceid=${member.country}:en`
-  );
-  const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}&count=8`);
-  if (!res.ok) throw new Error('news fetch failed');
+  const q = encodeURIComponent(member.city);
+  const url = `https://content.guardianapis.com/search?q=${q}&api-key=test&show-fields=trailText,thumbnail,byline&page-size=8&order-by=newest`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Guardian API error');
   const data = await res.json();
-  if (!data.items || data.items.length === 0) return [];
+  if (data.response.status !== 'ok') throw new Error('Guardian API error');
 
-  const articles = data.items.slice(0, 8).map(item => {
-    const parts = item.title.split(' - ');
-    const source = parts.length > 1 ? parts.pop().trim() : (item.author || '');
-    const title = parts.join(' - ').trim();
-    return {
-      title,
-      source,
-      link: item.link,
-      pubDate: item.pubDate,
-      level: classifyArticle(item.title, item.description || ''),
-    };
-  });
-
-  // Sort: critical → important → normal
-  const order = { critical: 0, important: 1, normal: 2 };
-  return articles.sort((a, b) => order[a.level] - order[b.level]);
+  return data.response.results.map(item => ({
+    title: item.webTitle,
+    source: 'The Guardian',
+    section: item.sectionName,
+    link: item.webUrl,
+    pubDate: item.webPublicationDate,
+    description: item.fields?.trailText || '',
+    thumbnail: item.fields?.thumbnail || null,
+    level: classifyArticle(item.webTitle, item.fields?.trailText || ''),
+  }));
 }
 
 // ── NewsItem ───────────────────────────────────────────────────────────────
@@ -966,13 +1003,26 @@ function NewsItem({ article }) {
   const prefix = article.level === 'critical' ? '🚨 ' : article.level === 'important' ? '📌 ' : '';
   return (
     <a href={article.link} target="_blank" rel="noopener noreferrer" className={`news-item ${article.level}`}>
-      <div className="news-item-title">{prefix}{article.title}</div>
-      <div className="news-item-meta">
-        <span>{article.source}</span>
-        {article.pubDate && <>
-          <span className="news-dot" />
-          <span>{timeAgo(article.pubDate)}</span>
-        </>}
+      <div className="news-item-inner">
+        <div className="news-item-body">
+          <div className="news-item-section">{article.section}</div>
+          <div className="news-item-title">{prefix}{article.title}</div>
+          {article.description ? (
+            <div className="news-item-desc"
+              dangerouslySetInnerHTML={{ __html: article.description.replace(/<[^>]+>/g,'').slice(0, 120) + '…' }}
+            />
+          ) : null}
+          <div className="news-item-meta">
+            <span className="news-source-tag">The Guardian</span>
+            {article.pubDate && <>
+              <span className="news-dot" />
+              <span>{timeAgo(article.pubDate)}</span>
+            </>}
+          </div>
+        </div>
+        {article.thumbnail && (
+          <img className="news-item-thumb" src={article.thumbnail} alt="" loading="lazy" />
+        )}
       </div>
     </a>
   );
