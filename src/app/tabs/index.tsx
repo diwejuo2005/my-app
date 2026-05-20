@@ -102,33 +102,53 @@ function getCallStatus(timezone: string, wakeHour: number, sleepHour: number) {
 function useWeather(member: Member) {
   const [weather, setWeather] = useState<any>(null);
   const lastRef = useRef<{ temp: number; code: number } | null>(null);
+  const hasGoodValueRef = useRef(false);
 
   useEffect(() => {
     const unit = member.country === "US" ? "fahrenheit" : "celsius";
 
-    function doFetch() {
-      fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${member.lat}&longitude=${member.lon}&current=temperature_2m,weather_code&temperature_unit=${unit}`,
-      )
-        .then((r) => r.json())
-        .then((d) => {
-          const temp = Math.round(d.current.temperature_2m);
-          const code = d.current.weather_code;
-          if (
-            lastRef.current &&
-            lastRef.current.temp === temp &&
-            lastRef.current.code === code
-          ) {
-            return;
-          }
-          lastRef.current = { temp, code };
-          setWeather({
-            temp,
-            unit: unit === "fahrenheit" ? "°F" : "°C",
-            ...weatherCodeInfo(code),
-          });
-        })
-        .catch(() => {});
+    async function doFetch() {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      try {
+        const r = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${member.lat}&longitude=${member.lon}&current=temperature_2m,weather_code&temperature_unit=${unit}`,
+          { signal: controller.signal },
+        );
+        clearTimeout(timeoutId);
+        const d = await r.json();
+        if (
+          !d ||
+          !d.current ||
+          typeof d.current.temperature_2m !== "number"
+        ) {
+          throw new Error("Invalid weather response");
+        }
+        const temp = Math.round(d.current.temperature_2m);
+        const code = typeof d.current.weather_code === "number"
+          ? d.current.weather_code
+          : 0;
+        if (
+          lastRef.current?.temp === temp &&
+          lastRef.current?.code === code
+        ) {
+          return;
+        }
+        lastRef.current = { temp, code };
+        hasGoodValueRef.current = true;
+        setWeather({
+          temp,
+          unit: unit === "fahrenheit" ? "°F" : "°C",
+          ...weatherCodeInfo(code),
+        });
+      } catch {
+        clearTimeout(timeoutId);
+        // Only surface an error sentinel if we have never had a good value.
+        // Otherwise keep showing the last good weather.
+        if (!hasGoodValueRef.current) {
+          setWeather({ error: true });
+        }
+      }
     }
 
     doFetch();
@@ -195,7 +215,21 @@ function FamilyCard({ member, tick }: { member: Member; tick: number }) {
         <Text style={s.location}>{member.city}, {member.country}</Text>
       </View>
 
-      {weather ? (
+      {weather === null ? (
+        <ActivityIndicator
+          color="rgba(255,255,255,0.4)"
+          style={{ marginVertical: 10 }}
+        />
+      ) : weather.error ? (
+        <View style={s.weatherRow}>
+          <Ionicons
+            name="warning-outline"
+            size={18}
+            color="rgba(255,255,255,0.5)"
+          />
+          <Text style={s.wLabel}>Weather unavailable</Text>
+        </View>
+      ) : (
         <View style={s.weatherRow}>
           <Ionicons
             name={weather.ionicon as any}
@@ -213,11 +247,6 @@ function FamilyCard({ member, tick }: { member: Member; tick: number }) {
             </View>
           )}
         </View>
-      ) : (
-        <ActivityIndicator
-          color="rgba(255,255,255,0.4)"
-          style={{ marginVertical: 10 }}
-        />
       )}
 
       <View style={s.callRow}>
@@ -247,7 +276,6 @@ export default function HomeScreen() {
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={s.wordmark}>ensemble</Text>
           <View style={s.statRow}>
             <View style={s.statCard}>
               <Text style={s.statNum}>{members.length}</Text>
@@ -275,13 +303,6 @@ export default function HomeScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#07080f" },
   scroll: { padding: 16, gap: 14 },
-  wordmark: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "#f0f0f6",
-    letterSpacing: -1,
-    marginBottom: 12,
-  },
   statRow: { flexDirection: "row", gap: 10, marginBottom: 6 },
   statCard: {
     flex: 1,

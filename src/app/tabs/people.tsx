@@ -40,19 +40,74 @@ const RELATIONSHIPS = [
   "Other",
 ];
 
-async function geocode(query: string) {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`;
+type CityResult = {
+  city: string;
+  country: string;
+  timezone: string;
+  lat: number;
+  lon: number;
+  admin1?: string;
+};
+
+async function searchCities(query: string): Promise<CityResult[]> {
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=en&format=json`;
   const res = await fetch(url);
   const data = await res.json();
-  if (!data.results?.length) throw new Error("Not found");
-  const r = data.results[0];
-  return {
+  const results: CityResult[] = (data.results || []).map((r: any) => ({
     city: r.name,
     country: r.country_code,
     timezone: r.timezone,
     lat: r.latitude,
     lon: r.longitude,
-  };
+    admin1: r.admin1,
+  }));
+
+  if (results.length > 0) return results;
+
+  // Nominatim fallback
+  try {
+    const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=10&addressdetails=1`;
+    const nomRes = await fetch(nomUrl);
+    const nomData = await nomRes.json();
+    if (!Array.isArray(nomData) || nomData.length === 0) return [];
+
+    const enriched: CityResult[] = await Promise.all(
+      nomData.map(async (item: any) => {
+        const addr = item.address || {};
+        const city =
+          addr.city ||
+          addr.town ||
+          addr.village ||
+          addr.hamlet ||
+          item.display_name ||
+          "Unknown";
+        const country = (addr.country_code || "").toUpperCase();
+        const lat = parseFloat(item.lat);
+        const lon = parseFloat(item.lon);
+        let timezone = "UTC";
+        try {
+          const tzRes = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m`,
+          );
+          const tzData = await tzRes.json();
+          if (tzData && typeof tzData.timezone === "string") {
+            timezone = tzData.timezone;
+          }
+        } catch {}
+        return {
+          city,
+          country,
+          timezone,
+          lat,
+          lon,
+          admin1: addr.state || addr.region || addr.county,
+        };
+      }),
+    );
+    return enriched;
+  } catch {
+    return [];
+  }
 }
 
 function MemberForm({
@@ -72,7 +127,7 @@ function MemberForm({
     initial?.photoUri,
   );
   const [cityQuery, setCityQuery] = useState(initial?.city || "");
-  const [cityResult, setCityResult] = useState<any>(
+  const [cityResult, setCityResult] = useState<CityResult | null>(
     initial
       ? {
           city: initial.city,
@@ -83,6 +138,8 @@ function MemberForm({
         }
       : null,
   );
+  const [searchResults, setSearchResults] = useState<CityResult[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [searching, setSearching] = useState(false);
 
   async function pickPhoto() {
@@ -100,10 +157,14 @@ function MemberForm({
   async function search() {
     if (!cityQuery.trim()) return;
     setSearching(true);
+    setHasSearched(false);
     try {
-      setCityResult(await geocode(cityQuery));
+      const results = await searchCities(cityQuery);
+      setSearchResults(results);
+      setHasSearched(true);
     } catch {
-      Alert.alert("City not found");
+      setSearchResults([]);
+      setHasSearched(true);
     }
     setSearching(false);
   }
@@ -186,9 +247,36 @@ function MemberForm({
           </Text>
         </TouchableOpacity>
       </View>
+      {searchResults.length > 0 && (
+        <View style={f.resultsList}>
+          {searchResults.map((r, i) => {
+            const isSelected =
+              cityResult &&
+              cityResult.lat === r.lat &&
+              cityResult.lon === r.lon;
+            return (
+              <TouchableOpacity
+                key={`${r.lat}-${r.lon}-${i}`}
+                style={[f.resultRow, isSelected && f.resultRowActive]}
+                onPress={() => setCityResult(r)}
+              >
+                <Text style={f.resultText}>
+                  {r.city}, {r.admin1 || ""} {r.admin1 ? "·" : ""} {r.country}
+                </Text>
+                <Text style={f.resultTz}>{r.timezone}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+      {hasSearched && searchResults.length === 0 && (
+        <Text style={f.notFound}>
+          City not found - try a nearby larger city.
+        </Text>
+      )}
       {cityResult && (
         <Text style={f.cityResult}>
-          {cityResult.city}, {cityResult.country} · {cityResult.timezone}
+          Selected: {cityResult.city}, {cityResult.country}
         </Text>
       )}
 
@@ -461,6 +549,40 @@ const f = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "rgba(34,197,94,0.2)",
+  },
+  resultsList: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  resultRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  resultRowActive: {
+    backgroundColor: "rgba(124,106,247,0.18)",
+  },
+  resultText: {
+    color: "#f0f0f6",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  resultTz: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  notFound: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 13,
+    fontStyle: "italic",
+    marginBottom: 14,
+    textAlign: "center",
   },
   actions: { flexDirection: "row", gap: 12, marginTop: 24 },
   cancelBtn: {
