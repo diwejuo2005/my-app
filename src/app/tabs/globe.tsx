@@ -31,12 +31,32 @@ export default function GlobeScreen() {
     .pointLat('lat').pointLng('lon')
     .pointColor(() => '#a78bfa')
     .pointRadius(0.5).pointAltitude(0.02)
-    .labelsData(members)
-    .labelLat('lat').labelLng('lon')
-    .labelText(d => d.emoji + ' ' + d.name)
-    .labelSize(1.4).labelColor(() => '#ffffff')
-    .labelDotRadius(0.4)
-    .labelDotOrientation(() => 'bottom');
+    .htmlElementsData(members)
+    .htmlLat('lat')
+    .htmlLng('lon')
+    .htmlElement(d => {
+      const colors = ['#2d3a5a','#2d4a3e','#3a2d4a','#4a3a2d','#2d4a4a'];
+      const bg = colors[d.id % colors.length];
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer';
+      const circle = document.createElement('div');
+      circle.style.cssText = 'width:36px;height:36px;border-radius:50%;background:' + bg + ';border:2px solid rgba(167,139,250,0.7);display:flex;align-items:center;justify-content:center;overflow:hidden;';
+      if (d.photoUri) {
+        const img = document.createElement('img');
+        img.src = d.photoUri;
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+        img.onerror = function() { circle.innerHTML = '<span style="color:white;font-weight:700;font-size:14px;">' + d.name[0].toUpperCase() + '</span>'; };
+        circle.appendChild(img);
+      } else {
+        circle.innerHTML = '<span style="color:white;font-weight:700;font-size:14px;">' + d.name[0].toUpperCase() + '</span>';
+      }
+      const label = document.createElement('div');
+      label.style.cssText = 'color:white;font-size:10px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.8);white-space:nowrap;';
+      label.textContent = d.name;
+      wrap.appendChild(circle);
+      wrap.appendChild(label);
+      return wrap;
+    });
   globe.controls().autoRotate = true;
   globe.controls().autoRotateSpeed = 0.6;
   globe.controls().enableZoom = true;

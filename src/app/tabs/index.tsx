@@ -1,47 +1,67 @@
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    SafeAreaView,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Image,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { Member, useMembers } from "../../context/MembersContext";
 
 const GRADIENTS: Record<string, [string, string]> = {
-  night: ["#0d1b2a", "#1b2838"],
-  dawn: ["#7b2d8b", "#c0392b"],
-  morning: ["#1a6194", "#1abc9c"],
-  afternoon: ["#155799", "#159957"],
-  evening: ["#4a148c", "#880e4f"],
-  "late-evening": ["#1a237e", "#311b92"],
+  night: ["#060810", "#0c0e1a"],
+  dawn: ["#170d1f", "#220e14"],
+  morning: ["#091828", "#0b1e18"],
+  afternoon: ["#0a1628", "#0b1a10"],
+  evening: ["#140d26", "#1a0c1e"],
+  "late-evening": ["#080a1e", "#10081c"],
 };
 
+const AVATAR_COLORS = [
+  "#2d3a5a",
+  "#2d4a3e",
+  "#3a2d4a",
+  "#4a3a2d",
+  "#2d4a4a",
+];
+
+function getAvatarColor(id: number) {
+  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+}
+
 function weatherCodeInfo(code: number) {
-  if (code === 0) return { icon: "☀️", label: "Clear", severe: false };
-  if (code <= 2) return { icon: "🌤️", label: "Mostly clear", severe: false };
-  if (code === 3) return { icon: "☁️", label: "Overcast", severe: false };
+  if (code === 0)
+    return { ionicon: "sunny-outline", label: "Clear", severe: false };
+  if (code <= 2)
+    return { ionicon: "partly-sunny-outline", label: "Mostly clear", severe: false };
+  if (code === 3)
+    return { ionicon: "cloud-outline", label: "Overcast", severe: false };
   if ([45, 48].includes(code))
-    return { icon: "🌫️", label: "Foggy", severe: false };
+    return { ionicon: "cloud-outline", label: "Foggy", severe: false };
   if ([51, 53, 55].includes(code))
-    return { icon: "🌦️", label: "Drizzle", severe: false };
+    return { ionicon: "rainy-outline", label: "Drizzle", severe: false };
   if ([61, 63].includes(code))
-    return { icon: "🌧️", label: "Rain", severe: false };
-  if (code === 65) return { icon: "🌧️", label: "Heavy rain", severe: true };
+    return { ionicon: "rainy-outline", label: "Rain", severe: false };
+  if (code === 65)
+    return { ionicon: "rainy-outline", label: "Heavy rain", severe: true };
   if ([71, 73].includes(code))
-    return { icon: "❄️", label: "Snow", severe: false };
-  if (code === 75) return { icon: "❄️", label: "Heavy snow", severe: true };
+    return { ionicon: "snow-outline", label: "Snow", severe: false };
+  if (code === 75)
+    return { ionicon: "snow-outline", label: "Heavy snow", severe: true };
   if ([80, 81].includes(code))
-    return { icon: "🌦️", label: "Showers", severe: false };
+    return { ionicon: "rainy-outline", label: "Showers", severe: false };
   if (code === 82)
-    return { icon: "⛈️", label: "Violent showers", severe: true };
-  if (code === 95) return { icon: "⛈️", label: "Thunderstorm", severe: true };
+    return { ionicon: "rainy-outline", label: "Violent showers", severe: true };
+  if (code === 95)
+    return { ionicon: "thunderstorm-outline", label: "Thunderstorm", severe: true };
   if ([96, 99].includes(code))
-    return { icon: "⛈️", label: "Severe storm", severe: true };
-  return { icon: "🌡️", label: "Unknown", severe: false };
+    return { ionicon: "thunderstorm-outline", label: "Severe storm", severe: true };
+  return { ionicon: "partly-sunny-outline", label: "Unknown", severe: false };
 }
 
 function getTimeOfDay(timezone: string) {
@@ -81,25 +101,45 @@ function getCallStatus(timezone: string, wakeHour: number, sleepHour: number) {
 
 function useWeather(member: Member) {
   const [weather, setWeather] = useState<any>(null);
+  const lastRef = useRef<{ temp: number; code: number } | null>(null);
+
   useEffect(() => {
     const unit = member.country === "US" ? "fahrenheit" : "celsius";
-    fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${member.lat}&longitude=${member.lon}&current=temperature_2m,weather_code&temperature_unit=${unit}`,
-    )
-      .then((r) => r.json())
-      .then((d) =>
-        setWeather({
-          temp: Math.round(d.current.temperature_2m),
-          unit: unit === "fahrenheit" ? "°F" : "°C",
-          ...weatherCodeInfo(d.current.weather_code),
-        }),
+
+    function doFetch() {
+      fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${member.lat}&longitude=${member.lon}&current=temperature_2m,weather_code&temperature_unit=${unit}`,
       )
-      .catch(() => {});
+        .then((r) => r.json())
+        .then((d) => {
+          const temp = Math.round(d.current.temperature_2m);
+          const code = d.current.weather_code;
+          if (
+            lastRef.current &&
+            lastRef.current.temp === temp &&
+            lastRef.current.code === code
+          ) {
+            return;
+          }
+          lastRef.current = { temp, code };
+          setWeather({
+            temp,
+            unit: unit === "fahrenheit" ? "°F" : "°C",
+            ...weatherCodeInfo(code),
+          });
+        })
+        .catch(() => {});
+    }
+
+    doFetch();
+    const interval = setInterval(doFetch, 10 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [member.id]);
+
   return weather;
 }
 
-function FamilyCard({ member }: { member: Member }) {
+function FamilyCard({ member, tick }: { member: Member; tick: number }) {
   const weather = useWeather(member);
   const tod = getTimeOfDay(member.timezone);
   const call = getCallStatus(
@@ -120,6 +160,9 @@ function FamilyCard({ member }: { member: Member }) {
     day: "numeric",
   }).format(new Date());
 
+  const avatarColor = getAvatarColor(member.id);
+  const initials = member.name[0].toUpperCase();
+
   return (
     <LinearGradient
       colors={GRADIENTS[tod]}
@@ -128,7 +171,13 @@ function FamilyCard({ member }: { member: Member }) {
       style={s.card}
     >
       <View style={s.cardTop}>
-        <Text style={s.emoji}>{member.emoji}</Text>
+        {member.photoUri ? (
+          <Image source={{ uri: member.photoUri }} style={s.avatarCircle} />
+        ) : (
+          <View style={[s.avatarCircle, { backgroundColor: avatarColor }]}>
+            <Text style={s.avatarInitial}>{initials}</Text>
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text style={s.name}>{member.name}</Text>
           <View style={s.badge}>
@@ -141,13 +190,18 @@ function FamilyCard({ member }: { member: Member }) {
         </View>
       </View>
 
-      <Text style={s.location}>
-        📍 {member.city}, {member.country}
-      </Text>
+      <View style={s.locationRow}>
+        <Ionicons name="location-outline" size={12} color="rgba(255,255,255,0.4)" />
+        <Text style={s.location}>{member.city}, {member.country}</Text>
+      </View>
 
       {weather ? (
         <View style={s.weatherRow}>
-          <Text style={s.wIcon}>{weather.icon}</Text>
+          <Ionicons
+            name={weather.ionicon as any}
+            size={22}
+            color="rgba(255,255,255,0.7)"
+          />
           <Text style={s.wTemp}>
             {weather.temp}
             {weather.unit}
@@ -155,7 +209,7 @@ function FamilyCard({ member }: { member: Member }) {
           <Text style={s.wLabel}>{weather.label}</Text>
           {weather.severe && (
             <View style={s.alertBadge}>
-              <Text style={s.alertText}>⚠ ALERT</Text>
+              <Ionicons name="warning-outline" size={14} color="#fca5a5" />
             </View>
           )}
         </View>
@@ -182,15 +236,8 @@ export default function HomeScreen() {
     return () => clearInterval(id);
   }, []);
 
-  const awake = members.filter((m) => {
-    const str = new Date().toLocaleString("en-US", {
-      timeZone: m.timezone,
-      hour: "numeric",
-      hour12: false,
-    });
-    const h = parseInt(str);
-    return h >= m.wakeHour && h < m.sleepHour;
-  }).length;
+  const timezones = new Set(members.map((m) => m.timezone)).size;
+  const countries = new Set(members.map((m) => m.country)).size;
 
   return (
     <View style={s.root}>
@@ -200,24 +247,23 @@ export default function HomeScreen() {
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
+          <Text style={s.wordmark}>ensemble</Text>
           <View style={s.statRow}>
             <View style={s.statCard}>
               <Text style={s.statNum}>{members.length}</Text>
-              <Text style={s.statLabel}>Connected</Text>
+              <Text style={s.statLabel}>People</Text>
             </View>
             <View style={s.statCard}>
-              <Text style={[s.statNum, { color: "#22c55e" }]}>{awake}</Text>
-              <Text style={s.statLabel}>Awake now</Text>
+              <Text style={s.statNum}>{timezones}</Text>
+              <Text style={s.statLabel}>Time Zones</Text>
             </View>
             <View style={s.statCard}>
-              <Text style={[s.statNum, { color: "#6b7280" }]}>
-                {members.length - awake}
-              </Text>
-              <Text style={s.statLabel}>Sleeping</Text>
+              <Text style={s.statNum}>{countries}</Text>
+              <Text style={s.statLabel}>Countries</Text>
             </View>
           </View>
           {members.map((m) => (
-            <FamilyCard key={`${m.id}-${tick}`} member={m} />
+            <FamilyCard key={m.id} member={m} tick={tick} />
           ))}
           <View style={{ height: 100 }} />
         </ScrollView>
@@ -229,6 +275,13 @@ export default function HomeScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#07080f" },
   scroll: { padding: 16, gap: 14 },
+  wordmark: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#f0f0f6",
+    letterSpacing: -1,
+    marginBottom: 12,
+  },
   statRow: { flexDirection: "row", gap: 10, marginBottom: 6 },
   statCard: {
     flex: 1,
@@ -248,7 +301,19 @@ const s = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
-  emoji: { fontSize: 40 },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarInitial: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 20,
+  },
   name: { fontSize: 20, fontWeight: "700", color: "white" },
   badge: {
     backgroundColor: "rgba(255,255,255,0.18)",
@@ -272,7 +337,13 @@ const s = StyleSheet.create({
     textAlign: "right",
   },
   date: { fontSize: 11, color: "rgba(255,255,255,0.5)", textAlign: "right" },
-  location: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 10 },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 10,
+  },
+  location: { fontSize: 12, color: "rgba(255,255,255,0.5)" },
   weatherRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -282,7 +353,6 @@ const s = StyleSheet.create({
     padding: 11,
     marginBottom: 10,
   },
-  wIcon: { fontSize: 26 },
   wTemp: { fontSize: 20, fontWeight: "700", color: "white" },
   wLabel: { fontSize: 12, color: "rgba(255,255,255,0.6)", flex: 1 },
   alertBadge: {
@@ -293,7 +363,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  alertText: { color: "#fca5a5", fontSize: 10, fontWeight: "700" },
   callRow: {
     flexDirection: "row",
     alignItems: "center",
