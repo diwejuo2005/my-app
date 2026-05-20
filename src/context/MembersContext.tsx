@@ -1,0 +1,109 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useEffect, useState } from "react";
+
+export type Member = {
+  id: number;
+  name: string;
+  relationship: string;
+  emoji: string;
+  city: string;
+  country: string;
+  timezone: string;
+  lat: number;
+  lon: number;
+  wakeHour: number;
+  sleepHour: number;
+};
+
+const DEFAULTS: Member[] = [
+  {
+    id: 1,
+    name: "Mom",
+    relationship: "Mother",
+    emoji: "👩",
+    city: "New York",
+    country: "US",
+    timezone: "America/New_York",
+    lat: 40.7128,
+    lon: -74.006,
+    wakeHour: 7,
+    sleepHour: 22,
+  },
+  {
+    id: 2,
+    name: "Dad",
+    relationship: "Father",
+    emoji: "👨",
+    city: "Chicago",
+    country: "US",
+    timezone: "America/Chicago",
+    lat: 41.8781,
+    lon: -87.6298,
+    wakeHour: 6,
+    sleepHour: 21,
+  },
+  {
+    id: 3,
+    name: "Nani",
+    relationship: "Grandmother",
+    emoji: "👵",
+    city: "Mumbai",
+    country: "IN",
+    timezone: "Asia/Kolkata",
+    lat: 19.076,
+    lon: 72.8777,
+    wakeHour: 5,
+    sleepHour: 21,
+  },
+  {
+    id: 4,
+    name: "Alex",
+    relationship: "Sibling",
+    emoji: "🧑",
+    city: "London",
+    country: "GB",
+    timezone: "Europe/London",
+    lat: 51.5074,
+    lon: -0.1278,
+    wakeHour: 8,
+    sleepHour: 23,
+  },
+];
+
+type Ctx = {
+  members: Member[];
+  addMember: (m: Member) => void;
+  updateMember: (m: Member) => void;
+  removeMember: (id: number) => void;
+};
+const MembersContext = createContext<Ctx | null>(null);
+
+export function MembersProvider({ children }: { children: React.ReactNode }) {
+  const [members, setMembers] = useState<Member[]>(DEFAULTS);
+
+  useEffect(() => {
+    AsyncStorage.getItem("ensemble_members").then((d) => {
+      if (d) setMembers(JSON.parse(d));
+    });
+  }, []);
+
+  const save = (list: Member[]) => {
+    setMembers(list);
+    AsyncStorage.setItem("ensemble_members", JSON.stringify(list));
+  };
+
+  return (
+    <MembersContext.Provider
+      value={{
+        members,
+        addMember: (m) => save([...members, m]),
+        updateMember: (m) => save(members.map((x) => (x.id === m.id ? m : x))),
+        removeMember: (id) => save(members.filter((x) => x.id !== id)),
+      }}
+    >
+      {children}
+    </MembersContext.Provider>
+  );
+}
+
+export const useMembers = () => useContext(MembersContext)!;

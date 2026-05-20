@@ -1,69 +1,15 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
-
-const MEMBERS = [
-  {
-    id: 1,
-    name: "Mom",
-    relationship: "Mother",
-    emoji: "👩",
-    city: "New York",
-    country: "US",
-    timezone: "America/New_York",
-    lat: 40.7128,
-    lon: -74.006,
-    wakeHour: 7,
-    sleepHour: 22,
-  },
-  {
-    id: 2,
-    name: "Dad",
-    relationship: "Father",
-    emoji: "👨",
-    city: "Chicago",
-    country: "US",
-    timezone: "America/Chicago",
-    lat: 41.8781,
-    lon: -87.6298,
-    wakeHour: 6,
-    sleepHour: 21,
-  },
-  {
-    id: 3,
-    name: "Nani",
-    relationship: "Grandmother",
-    emoji: "👵",
-    city: "Mumbai",
-    country: "IN",
-    timezone: "Asia/Kolkata",
-    lat: 19.076,
-    lon: 72.8777,
-    wakeHour: 5,
-    sleepHour: 21,
-  },
-  {
-    id: 4,
-    name: "Alex",
-    relationship: "Sibling",
-    emoji: "🧑",
-    city: "London",
-    country: "GB",
-    timezone: "Europe/London",
-    lat: 51.5074,
-    lon: -0.1278,
-    wakeHour: 8,
-    sleepHour: 23,
-  },
-];
+import { Member, useMembers } from "../../context/MembersContext";
 
 const GRADIENTS: Record<string, [string, string]> = {
   night: ["#0d1b2a", "#1b2838"],
@@ -129,11 +75,11 @@ function getCallStatus(timezone: string, wakeHour: number, sleepHour: number) {
     (t >= wakeHour && t < wakeHour + 1) ||
     (t >= sleepHour - 1 && t < sleepHour)
   )
-    return { label: "Just waking / winding down", dot: "#f59e0b" };
+    return { label: "Waking / winding down", dot: "#f59e0b" };
   return { label: "Probably sleeping", dot: "#6b7280" };
 }
 
-function useWeather(member: (typeof MEMBERS)[0]) {
+function useWeather(member: Member) {
   const [weather, setWeather] = useState<any>(null);
   useEffect(() => {
     const unit = member.country === "US" ? "fahrenheit" : "celsius";
@@ -153,7 +99,7 @@ function useWeather(member: (typeof MEMBERS)[0]) {
   return weather;
 }
 
-function FamilyCard({ member }: { member: (typeof MEMBERS)[0] }) {
+function FamilyCard({ member }: { member: Member }) {
   const weather = useWeather(member);
   const tod = getTimeOfDay(member.timezone);
   const call = getCallStatus(
@@ -179,186 +125,184 @@ function FamilyCard({ member }: { member: (typeof MEMBERS)[0] }) {
       colors={GRADIENTS[tod]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={styles.card}
+      style={s.card}
     >
-      <View style={styles.cardHeader}>
-        <Text style={styles.emoji}>{member.emoji}</Text>
-        <View>
-          <Text style={styles.name}>{member.name}</Text>
-          <View style={styles.relationBadge}>
-            <Text style={styles.relationText}>
-              {member.relationship.toUpperCase()}
-            </Text>
+      <View style={s.cardTop}>
+        <Text style={s.emoji}>{member.emoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.name}>{member.name}</Text>
+          <View style={s.badge}>
+            <Text style={s.badgeText}>{member.relationship.toUpperCase()}</Text>
           </View>
         </View>
+        <View style={{ alignItems: "flex-end" }}>
+          <Text style={s.time}>{timeStr}</Text>
+          <Text style={s.date}>{dateStr}</Text>
+        </View>
       </View>
-      <Text style={styles.location}>
+
+      <Text style={s.location}>
         📍 {member.city}, {member.country}
       </Text>
-      <Text style={styles.time}>{timeStr}</Text>
-      <Text style={styles.date}>{dateStr}</Text>
+
       {weather ? (
-        <View style={styles.weatherRow}>
-          <Text style={styles.weatherIcon}>{weather.icon}</Text>
-          <View>
-            <Text style={styles.weatherTemp}>
-              {weather.temp}
-              {weather.unit}
-            </Text>
-            <Text style={styles.weatherLabel}>{weather.label}</Text>
-          </View>
+        <View style={s.weatherRow}>
+          <Text style={s.wIcon}>{weather.icon}</Text>
+          <Text style={s.wTemp}>
+            {weather.temp}
+            {weather.unit}
+          </Text>
+          <Text style={s.wLabel}>{weather.label}</Text>
           {weather.severe && (
-            <View style={styles.alertBadge}>
-              <Text style={styles.alertText}>⚠ ALERT</Text>
+            <View style={s.alertBadge}>
+              <Text style={s.alertText}>⚠ ALERT</Text>
             </View>
           )}
         </View>
       ) : (
         <ActivityIndicator
           color="rgba(255,255,255,0.4)"
-          style={{ marginVertical: 12 }}
+          style={{ marginVertical: 10 }}
         />
       )}
-      <View style={styles.callRow}>
-        <View style={[styles.dot, { backgroundColor: call.dot }]} />
-        <Text style={styles.callLabel}>{call.label}</Text>
+
+      <View style={s.callRow}>
+        <View style={[s.dot, { backgroundColor: call.dot }]} />
+        <Text style={s.callLabel}>{call.label}</Text>
       </View>
     </LinearGradient>
   );
 }
 
-export default function Index() {
+export default function HomeScreen() {
+  const { members } = useMembers();
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
+  const awake = members.filter((m) => {
+    const str = new Date().toLocaleString("en-US", {
+      timeZone: m.timezone,
+      hour: "numeric",
+      hour12: false,
+    });
+    const h = parseInt(str);
+    return h >= m.wakeHour && h < m.sleepHour;
+  }).length;
+
   return (
-    <View style={styles.root}>
+    <View style={s.root}>
       <StatusBar barStyle="light-content" />
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.header}>
-          <View style={styles.logoMark}>
-            <Text style={styles.logoEmoji}>🎵</Text>
-          </View>
-          <View>
-            <Text style={styles.logoText}>Ensemble</Text>
-            <Text style={styles.logoTagline}>
-              Everyone you love, at a glance
-            </Text>
-          </View>
-        </View>
+      <SafeAreaView style={{ flex: 1 }}>
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {MEMBERS.map((m) => (
-            <FamilyCard key={m.id} member={m} />
+          <View style={s.statRow}>
+            <View style={s.statCard}>
+              <Text style={s.statNum}>{members.length}</Text>
+              <Text style={s.statLabel}>Connected</Text>
+            </View>
+            <View style={s.statCard}>
+              <Text style={[s.statNum, { color: "#22c55e" }]}>{awake}</Text>
+              <Text style={s.statLabel}>Awake now</Text>
+            </View>
+            <View style={s.statCard}>
+              <Text style={[s.statNum, { color: "#6b7280" }]}>
+                {members.length - awake}
+              </Text>
+              <Text style={s.statLabel}>Sleeping</Text>
+            </View>
+          </View>
+          {members.map((m) => (
+            <FamilyCard key={`${m.id}-${tick}`} member={m} />
           ))}
+          <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#07080f" },
-  safe: { flex: 1 },
-  header: {
+  scroll: { padding: 16, gap: 14 },
+  statRow: { flexDirection: "row", gap: 10, marginBottom: 6 },
+  statCard: {
+    flex: 1,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 16,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+  statNum: { fontSize: 26, fontWeight: "800", color: "#f0f0f6" },
+  statLabel: { fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 },
+  card: { borderRadius: 22, padding: 20 },
+  cardTop: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.08)",
+    marginBottom: 12,
   },
-  logoMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: "#7c6af7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoEmoji: { fontSize: 20 },
-  logoText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#f0f0f6",
-    letterSpacing: -0.5,
-  },
-  logoTagline: { fontSize: 11, color: "rgba(240,240,246,0.45)" },
-  scroll: { padding: 16, gap: 16, paddingBottom: 40 },
-  card: { borderRadius: 22, padding: 22 },
-  cardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  emoji: { fontSize: 44 },
-  name: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "white",
-    letterSpacing: -0.3,
-  },
-  relationBadge: {
+  emoji: { fontSize: 40 },
+  name: { fontSize: 20, fontWeight: "700", color: "white" },
+  badge: {
     backgroundColor: "rgba(255,255,255,0.18)",
-    paddingHorizontal: 9,
+    paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 20,
-    marginTop: 4,
+    marginTop: 3,
     alignSelf: "flex-start",
   },
-  relationText: {
-    fontSize: 10,
+  badgeText: {
+    fontSize: 9,
     fontWeight: "700",
     color: "rgba(255,255,255,0.8)",
     letterSpacing: 0.5,
   },
-  location: { fontSize: 12, color: "rgba(255,255,255,0.55)", marginBottom: 8 },
   time: {
-    fontSize: 46,
+    fontSize: 28,
     fontWeight: "800",
     color: "white",
-    letterSpacing: -2,
-    lineHeight: 52,
+    letterSpacing: -1,
+    textAlign: "right",
   },
-  date: { fontSize: 13, color: "rgba(255,255,255,0.55)", marginBottom: 18 },
+  date: { fontSize: 11, color: "rgba(255,255,255,0.5)", textAlign: "right" },
+  location: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginBottom: 10 },
   weatherRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 12,
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 12,
+    padding: 11,
+    marginBottom: 10,
   },
-  weatherIcon: { fontSize: 30 },
-  weatherTemp: { fontSize: 22, fontWeight: "700", color: "white" },
-  weatherLabel: { fontSize: 12, color: "rgba(255,255,255,0.6)" },
+  wIcon: { fontSize: 26 },
+  wTemp: { fontSize: 20, fontWeight: "700", color: "white" },
+  wLabel: { fontSize: 12, color: "rgba(255,255,255,0.6)", flex: 1 },
   alertBadge: {
-    marginLeft: "auto",
     backgroundColor: "rgba(239,68,68,0.3)",
     borderWidth: 1,
     borderColor: "rgba(239,68,68,0.5)",
     borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  alertText: { color: "#fca5a5", fontSize: 11, fontWeight: "700" },
+  alertText: { color: "#fca5a5", fontSize: 10, fontWeight: "700" },
   callRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 12,
-    padding: 12,
+    gap: 8,
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderRadius: 10,
+    padding: 10,
   },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  dot: { width: 9, height: 9, borderRadius: 5 },
   callLabel: {
     fontSize: 13,
     fontWeight: "500",
