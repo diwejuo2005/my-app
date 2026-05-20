@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs, useRouter } from "expo-router";
-import { TouchableOpacity } from "react-native";
+import { SafeAreaView, Text, TouchableOpacity, View } from "react-native";
 
 export default function TabLayout() {
   const router = useRouter();
@@ -8,18 +8,50 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerStyle: { backgroundColor: "#07080f" },
-        headerShadowVisible: false,
-        headerTintColor: "#f0f0f6",
-        headerTitleStyle: { fontWeight: "700", fontSize: 18 },
-        headerRight: () => (
-          <TouchableOpacity
-            onPress={() => router.push("/settings")}
-            style={{ marginRight: 16 }}
-          >
-            <Ionicons name="settings-outline" size={22} color="#a78bfa" />
-          </TouchableOpacity>
-        ),
+        header: ({ route, options }) => {
+          const title = options.title ?? route.name;
+          return (
+            <SafeAreaView style={{ backgroundColor: "#07080f" }}>
+              <View
+                style={{
+                  paddingTop: 8,
+                  paddingBottom: 12,
+                  paddingHorizontal: 16,
+                  position: "relative",
+                  alignItems: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#f0f0f6",
+                    fontSize: 26,
+                    fontWeight: "800",
+                    letterSpacing: -0.5,
+                  }}
+                >
+                  Ensemble
+                </Text>
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.5)",
+                    fontSize: 13,
+                    fontWeight: "600",
+                    marginTop: 2,
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  {title}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => router.push("/settings")}
+                  style={{ position: "absolute", right: 16, top: 8, padding: 6 }}
+                >
+                  <Ionicons name="settings-outline" size={22} color="#a78bfa" />
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          );
+        },
         tabBarStyle: {
           position: "absolute",
           bottom: 24,
