@@ -1,30 +1,31 @@
+import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import {
-    Alert,
-    Modal,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Member, useMembers } from "../../context/MembersContext";
 
-const EMOJIS = [
-  "👩",
-  "👨",
-  "👴",
-  "👵",
-  "🧑",
-  "👧",
-  "👦",
-  "👩‍💼",
-  "👨‍💼",
-  "🧒",
-  "🙋",
+const AVATAR_COLORS = [
+  "#2d3a5a",
+  "#2d4a3e",
+  "#3a2d4a",
+  "#4a3a2d",
+  "#2d4a4a",
 ];
+
+function getAvatarColor(id: number) {
+  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+}
+
 const RELATIONSHIPS = [
   "Mother",
   "Father",
@@ -67,7 +68,9 @@ function MemberForm({
   const [relationship, setRelationship] = useState(
     initial?.relationship || "Mother",
   );
-  const [emoji, setEmoji] = useState(initial?.emoji || "👩");
+  const [photoUri, setPhotoUri] = useState<string | undefined>(
+    initial?.photoUri,
+  );
   const [cityQuery, setCityQuery] = useState(initial?.city || "");
   const [cityResult, setCityResult] = useState<any>(
     initial
@@ -81,6 +84,18 @@ function MemberForm({
       : null,
   );
   const [searching, setSearching] = useState(false);
+
+  async function pickPhoto() {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setPhotoUri(result.assets[0].uri);
+    }
+  }
 
   async function search() {
     if (!cityQuery.trim()) return;
@@ -99,33 +114,33 @@ function MemberForm({
     onSave({
       name: name.trim(),
       relationship,
-      emoji,
+      photoUri,
       ...cityResult,
       wakeHour: initial?.wakeHour ?? 7,
       sleepHour: initial?.sleepHour ?? 22,
     });
   }
 
+  const initials = name.trim() ? name.trim()[0].toUpperCase() : "?";
+  const avatarColor = initial ? getAvatarColor(initial.id) : "#2d3a5a";
+
   return (
     <View style={f.modal}>
       <Text style={f.title}>{initial ? "Edit Profile" : "Add Person"}</Text>
 
-      <Text style={f.label}>EMOJI</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 16 }}
-      >
-        {EMOJIS.map((e) => (
-          <TouchableOpacity
-            key={e}
-            onPress={() => setEmoji(e)}
-            style={[f.emojiBtn, emoji === e && f.emojiBtnActive]}
-          >
-            <Text style={{ fontSize: 28 }}>{e}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <Text style={f.label}>PHOTO</Text>
+      <View style={f.photoRow}>
+        {photoUri ? (
+          <Image source={{ uri: photoUri }} style={f.avatarCircle} />
+        ) : (
+          <View style={[f.avatarCircle, { backgroundColor: avatarColor }]}>
+            <Text style={f.avatarInitial}>{initials}</Text>
+          </View>
+        )}
+        <TouchableOpacity style={f.uploadBtn} onPress={pickPhoto}>
+          <Text style={f.uploadText}>Upload Photo</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={f.label}>NAME</Text>
       <TextInput
@@ -173,7 +188,7 @@ function MemberForm({
       </View>
       {cityResult && (
         <Text style={f.cityResult}>
-          ✓ {cityResult.city}, {cityResult.country} · {cityResult.timezone}
+          {cityResult.city}, {cityResult.country} · {cityResult.timezone}
         </Text>
       )}
 
@@ -228,7 +243,20 @@ export default function PeopleScreen() {
       >
         {members.map((m) => (
           <View key={m.id} style={p.card}>
-            <Text style={p.emoji}>{m.emoji}</Text>
+            {m.photoUri ? (
+              <Image source={{ uri: m.photoUri }} style={p.avatarCircle} />
+            ) : (
+              <View
+                style={[
+                  p.avatarCircle,
+                  { backgroundColor: getAvatarColor(m.id) },
+                ]}
+              >
+                <Text style={p.avatarInitial}>
+                  {m.name[0].toUpperCase()}
+                </Text>
+              </View>
+            )}
             <View style={{ flex: 1 }}>
               <Text style={p.name}>{m.name}</Text>
               <Text style={p.sub}>
@@ -258,7 +286,7 @@ export default function PeopleScreen() {
           </View>
         ))}
         <TouchableOpacity style={p.addBtn} onPress={() => setAdding(true)}>
-          <Text style={p.addText}>＋ Add Person</Text>
+          <Text style={p.addText}>+ Add Person</Text>
         </TouchableOpacity>
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -305,7 +333,19 @@ const p = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.07)",
   },
-  emoji: { fontSize: 38 },
+  avatarCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarInitial: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 20,
+  },
   name: { fontSize: 17, fontWeight: "700", color: "#f0f0f6" },
   sub: { fontSize: 12, color: "rgba(255,255,255,0.5)", marginTop: 2 },
   tz: { fontSize: 11, color: "rgba(255,255,255,0.3)", marginTop: 1 },
@@ -352,6 +392,34 @@ const f = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 8,
   },
+  photoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 20,
+  },
+  avatarCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarInitial: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 26,
+  },
+  uploadBtn: {
+    backgroundColor: "rgba(124,106,247,0.2)",
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(124,106,247,0.4)",
+  },
+  uploadText: { color: "#c4b5fd", fontWeight: "600", fontSize: 14 },
   input: {
     backgroundColor: "rgba(255,255,255,0.07)",
     borderWidth: 1,
@@ -361,17 +429,6 @@ const f = StyleSheet.create({
     fontSize: 15,
     padding: 13,
     marginBottom: 16,
-  },
-  emojiBtn: {
-    padding: 6,
-    borderRadius: 10,
-    marginRight: 6,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  emojiBtnActive: {
-    borderColor: "#7c6af7",
-    backgroundColor: "rgba(124,106,247,0.2)",
   },
   relBtn: {
     paddingHorizontal: 14,
