@@ -5,7 +5,7 @@ export type Member = {
   id: number;
   name: string;
   relationship: string;
-  emoji: string;
+  photoUri?: string;
   city: string;
   country: string;
   timezone: string;
@@ -20,7 +20,6 @@ const DEFAULTS: Member[] = [
     id: 1,
     name: "Mom",
     relationship: "Mother",
-    emoji: "👩",
     city: "New York",
     country: "US",
     timezone: "America/New_York",
@@ -33,7 +32,6 @@ const DEFAULTS: Member[] = [
     id: 2,
     name: "Dad",
     relationship: "Father",
-    emoji: "👨",
     city: "Chicago",
     country: "US",
     timezone: "America/Chicago",
@@ -46,7 +44,6 @@ const DEFAULTS: Member[] = [
     id: 3,
     name: "Nani",
     relationship: "Grandmother",
-    emoji: "👵",
     city: "Mumbai",
     country: "IN",
     timezone: "Asia/Kolkata",
@@ -59,7 +56,6 @@ const DEFAULTS: Member[] = [
     id: 4,
     name: "Alex",
     relationship: "Sibling",
-    emoji: "🧑",
     city: "London",
     country: "GB",
     timezone: "Europe/London",
