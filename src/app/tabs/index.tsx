@@ -4,14 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Modal,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { Member, useMembers } from "../../context/MembersContext";
+import { notifyBirthday } from "../../lib/notifications";
 
 const GRADIENTS: Record<string, [string, string]> = {
   night: ["#060810", "#0c0e1a"],
@@ -161,6 +164,7 @@ function useWeather(member: Member) {
 
 function FamilyCard({ member, tick }: { member: Member; tick: number }) {
   const weather = useWeather(member);
+  const [zoom, setZoom] = useState(false);
   const tod = getTimeOfDay(member.timezone);
   const call = getCallStatus(
     member.timezone,
@@ -191,13 +195,15 @@ function FamilyCard({ member, tick }: { member: Member; tick: number }) {
       style={s.card}
     >
       <View style={s.cardTop}>
-        {member.photoUri ? (
-          <Image source={{ uri: member.photoUri }} style={s.avatarCircle} />
-        ) : (
-          <View style={[s.avatarCircle, { backgroundColor: avatarColor }]}>
-            <Text style={s.avatarInitial}>{initials}</Text>
-          </View>
-        )}
+        <TouchableOpacity onPress={() => member.photoUri && setZoom(true)}>
+          {member.photoUri ? (
+            <Image source={{ uri: member.photoUri }} style={s.avatarCircle} />
+          ) : (
+            <View style={[s.avatarCircle, { backgroundColor: avatarColor }]}>
+              <Text style={s.avatarInitial}>{initials}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={s.name}>{member.name}</Text>
           <View style={s.badge}>
@@ -253,6 +259,20 @@ function FamilyCard({ member, tick }: { member: Member; tick: number }) {
         <View style={[s.dot, { backgroundColor: call.dot }]} />
         <Text style={s.callLabel}>{call.label}</Text>
       </View>
+
+      <Modal visible={zoom} transparent animationType="fade">
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}
+          activeOpacity={1}
+          onPress={() => setZoom(false)}
+        >
+          <Image
+            source={{ uri: member.photoUri! }}
+            style={{ width: '90%', aspectRatio: 1, borderRadius: 16 }}
+            resizeMode="cover"
+          />
+        </TouchableOpacity>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -264,6 +284,20 @@ export default function HomeScreen() {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    const today = new Date();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const todayMD = `${mm}-${dd}`;
+    members.forEach(m => {
+      if (m.birthday && m.birthday.slice(5) === todayMD) notifyBirthday(m, 'birthday');
+      if (m.anniversary && m.anniversary.slice(5) === todayMD) notifyBirthday(m, 'anniversary');
+      (m.importantDates || []).forEach(d => {
+        if (d.date && d.date.slice(5) === todayMD) notifyBirthday({ ...m, name: m.name + ' — ' + d.label } as any, 'birthday');
+      });
+    });
+  }, [members]);
 
   const timezones = new Set(members.map((m) => m.timezone)).size;
   const countries = new Set(members.map((m) => m.country)).size;
