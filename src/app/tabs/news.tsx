@@ -1,15 +1,48 @@
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Linking,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Member, useMembers } from "../../context/MembersContext";
+
+const AVATAR_COLORS = [
+  "#2d3a5a",
+  "#2d4a3e",
+  "#3a2d4a",
+  "#4a3a2d",
+  "#2d4a4a",
+];
+
+function getAvatarColor(id: number) {
+  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+}
+
+const COUNTRY_TAG: Record<string, string> = {
+  US: "world/united-states",
+  GB: "world/uk",
+  IN: "world/india",
+  AU: "world/australia",
+  CA: "world/canada",
+  FR: "world/france",
+  DE: "world/germany",
+  JP: "world/japan",
+  CN: "world/china",
+  BR: "world/brazil",
+  MX: "world/mexico",
+  NG: "world/nigeria",
+  ZA: "world/south-africa",
+  IT: "world/italy",
+  ES: "world/spain",
+  PK: "world/pakistan",
+  GH: "world/ghana",
+};
 
 const CRITICAL = [
   "earthquake",
@@ -62,8 +95,10 @@ function timeAgo(dateStr: string) {
 }
 
 async function fetchNews(member: Member) {
-  const q = encodeURIComponent(member.city);
-  const url = `https://content.guardianapis.com/search?q=${q}&api-key=test&show-fields=trailText&page-size=6&order-by=newest`;
+  const tag = COUNTRY_TAG[member.country];
+  const url = tag
+    ? `https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`
+    : `https://content.guardianapis.com/search?q=${encodeURIComponent(member.country)}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`;
   const res = await fetch(url);
   const data = await res.json();
   return (data.response?.results || []).map((item: any) => ({
@@ -136,7 +171,13 @@ export default function NewsScreen() {
             onPress={() => setActive(i)}
             style={[s.tab, active === i && s.tabActive]}
           >
-            <Text style={s.tabEmoji}>{m.emoji}</Text>
+            {m.photoUri ? (
+              <Image source={{ uri: m.photoUri }} style={s.tabAvatar} />
+            ) : (
+              <View style={[s.tabAvatar, { backgroundColor: getAvatarColor(m.id) }]}>
+                <Text style={s.tabAvatarInitial}>{m.name[0].toUpperCase()}</Text>
+              </View>
+            )}
             <Text style={[s.tabName, active === i && s.tabNameActive]}>
               {m.name}
             </Text>
@@ -169,11 +210,6 @@ export default function NewsScreen() {
           >
             <Text style={s.section}>{article.section}</Text>
             <Text style={[s.title, { color: titleColor(article.level) }]}>
-              {article.level === "critical"
-                ? "🚨 "
-                : article.level === "important"
-                  ? "📌 "
-                  : ""}
               {article.title}
             </Text>
             {article.desc ? (
@@ -183,7 +219,7 @@ export default function NewsScreen() {
             ) : null}
             <View style={s.meta}>
               <Text style={s.source}>The Guardian</Text>
-              <Text style={s.dot}>·</Text>
+              <Text style={s.metaDot}>·</Text>
               <Text style={s.ago}>{timeAgo(article.pubDate)}</Text>
             </View>
           </TouchableOpacity>
@@ -215,7 +251,19 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(124,106,247,0.4)",
   },
-  tabEmoji: { fontSize: 16 },
+  tabAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  tabAvatarInitial: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 11,
+  },
   tabName: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.45)" },
   tabNameActive: { color: "#c4b5fd" },
   liveBadge: {
@@ -258,7 +306,7 @@ const s = StyleSheet.create({
   },
   meta: { flexDirection: "row", alignItems: "center", gap: 5 },
   source: { fontSize: 11, fontWeight: "700", color: "#a78bfa" },
-  dot: { color: "rgba(255,255,255,0.25)", fontSize: 10 },
+  metaDot: { color: "rgba(255,255,255,0.25)", fontSize: 10 },
   ago: { fontSize: 11, color: "rgba(255,255,255,0.35)" },
   empty: {
     textAlign: "center",
