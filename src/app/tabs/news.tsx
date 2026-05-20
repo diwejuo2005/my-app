@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { Member, useMembers } from "../../context/MembersContext";
+import { notifyCritical } from "../../lib/notifications";
 
 const AVATAR_COLORS = [
   "#2d3a5a",
@@ -42,6 +43,263 @@ const COUNTRY_TAG: Record<string, string> = {
   ES: "world/spain",
   PK: "world/pakistan",
   GH: "world/ghana",
+  KE: "world/kenya",
+  EG: "world/egypt",
+  ET: "world/ethiopia",
+  RU: "world/russia",
+  UA: "world/ukraine",
+  IL: "world/israel",
+  IR: "world/iran",
+  SA: "world/saudiarabia",
+  AE: "world/uae",
+  TR: "world/turkey",
+  GR: "world/greece",
+  PT: "world/portugal",
+  NL: "world/netherlands",
+  BE: "world/belgium",
+  CH: "world/switzerland",
+  AT: "world/austria",
+  SE: "world/sweden",
+  NO: "world/norway",
+  DK: "world/denmark",
+  FI: "world/finland",
+  IE: "world/ireland",
+  PL: "world/poland",
+  RO: "world/romania",
+  HU: "world/hungary",
+  CZ: "world/czech-republic",
+  KR: "world/south-korea",
+  KP: "world/north-korea",
+  TH: "world/thailand",
+  VN: "world/vietnam",
+  ID: "world/indonesia",
+  PH: "world/philippines",
+  MY: "world/malaysia",
+  SG: "world/singapore",
+  NZ: "world/new-zealand",
+  AR: "world/argentina",
+  CL: "world/chile",
+  CO: "world/colombia",
+  PE: "world/peru",
+  VE: "world/venezuela",
+  BD: "world/bangladesh",
+  LK: "world/sri-lanka",
+  NP: "world/nepal",
+  MM: "world/burma",
+  AF: "world/afghanistan",
+  IQ: "world/iraq",
+  SY: "world/syria",
+  LB: "world/lebanon",
+  JO: "world/jordan",
+  YE: "world/yemen",
+  MA: "world/morocco",
+  DZ: "world/algeria",
+  TN: "world/tunisia",
+  LY: "world/libya",
+  SD: "world/sudan",
+  SS: "world/southsudan",
+  SO: "world/somalia",
+  UG: "world/uganda",
+  TZ: "world/tanzania",
+  RW: "world/rwanda",
+  CM: "world/cameroon",
+  CI: "world/ivorycoast",
+  SN: "world/senegal",
+  ZW: "world/zimbabwe",
+  ZM: "world/zambia",
+  MZ: "world/mozambique",
+};
+
+const COUNTRY_NAME: Record<string, string> = {
+  US: "United States",
+  GB: "United Kingdom",
+  IN: "India",
+  AU: "Australia",
+  CA: "Canada",
+  FR: "France",
+  DE: "Germany",
+  JP: "Japan",
+  CN: "China",
+  BR: "Brazil",
+  MX: "Mexico",
+  NG: "Nigeria",
+  ZA: "South Africa",
+  IT: "Italy",
+  ES: "Spain",
+  PK: "Pakistan",
+  GH: "Ghana",
+  KE: "Kenya",
+  EG: "Egypt",
+  ET: "Ethiopia",
+  RU: "Russia",
+  UA: "Ukraine",
+  IL: "Israel",
+  IR: "Iran",
+  SA: "Saudi Arabia",
+  AE: "United Arab Emirates",
+  TR: "Turkey",
+  GR: "Greece",
+  PT: "Portugal",
+  NL: "Netherlands",
+  BE: "Belgium",
+  CH: "Switzerland",
+  AT: "Austria",
+  SE: "Sweden",
+  NO: "Norway",
+  DK: "Denmark",
+  FI: "Finland",
+  IE: "Ireland",
+  PL: "Poland",
+  RO: "Romania",
+  HU: "Hungary",
+  CZ: "Czech Republic",
+  KR: "South Korea",
+  KP: "North Korea",
+  TH: "Thailand",
+  VN: "Vietnam",
+  ID: "Indonesia",
+  PH: "Philippines",
+  MY: "Malaysia",
+  SG: "Singapore",
+  NZ: "New Zealand",
+  AR: "Argentina",
+  CL: "Chile",
+  CO: "Colombia",
+  PE: "Peru",
+  VE: "Venezuela",
+  BD: "Bangladesh",
+  LK: "Sri Lanka",
+  NP: "Nepal",
+  MM: "Myanmar",
+  AF: "Afghanistan",
+  IQ: "Iraq",
+  SY: "Syria",
+  LB: "Lebanon",
+  JO: "Jordan",
+  YE: "Yemen",
+  MA: "Morocco",
+  DZ: "Algeria",
+  TN: "Tunisia",
+  LY: "Libya",
+  SD: "Sudan",
+  SS: "South Sudan",
+  SO: "Somalia",
+  UG: "Uganda",
+  TZ: "Tanzania",
+  RW: "Rwanda",
+  CM: "Cameroon",
+  CI: "Ivory Coast",
+  SN: "Senegal",
+  ZW: "Zimbabwe",
+  ZM: "Zambia",
+  MZ: "Mozambique",
+  KW: "Kuwait",
+  QA: "Qatar",
+  BH: "Bahrain",
+  OM: "Oman",
+  CU: "Cuba",
+  HT: "Haiti",
+  DO: "Dominican Republic",
+  JM: "Jamaica",
+  PR: "Puerto Rico",
+  TT: "Trinidad and Tobago",
+  BS: "Bahamas",
+  BZ: "Belize",
+  CR: "Costa Rica",
+  PA: "Panama",
+  NI: "Nicaragua",
+  HN: "Honduras",
+  SV: "El Salvador",
+  GT: "Guatemala",
+  EC: "Ecuador",
+  BO: "Bolivia",
+  PY: "Paraguay",
+  UY: "Uruguay",
+  GY: "Guyana",
+  SR: "Suriname",
+  IS: "Iceland",
+  LU: "Luxembourg",
+  MC: "Monaco",
+  MT: "Malta",
+  CY: "Cyprus",
+  EE: "Estonia",
+  LV: "Latvia",
+  LT: "Lithuania",
+  SK: "Slovakia",
+  SI: "Slovenia",
+  HR: "Croatia",
+  BA: "Bosnia and Herzegovina",
+  RS: "Serbia",
+  ME: "Montenegro",
+  MK: "North Macedonia",
+  AL: "Albania",
+  BG: "Bulgaria",
+  MD: "Moldova",
+  BY: "Belarus",
+  GE: "Georgia",
+  AM: "Armenia",
+  AZ: "Azerbaijan",
+  KZ: "Kazakhstan",
+  UZ: "Uzbekistan",
+  TM: "Turkmenistan",
+  KG: "Kyrgyzstan",
+  TJ: "Tajikistan",
+  MN: "Mongolia",
+  BT: "Bhutan",
+  MV: "Maldives",
+  BN: "Brunei",
+  TL: "Timor-Leste",
+  LA: "Laos",
+  KH: "Cambodia",
+  TW: "Taiwan",
+  HK: "Hong Kong",
+  MO: "Macau",
+  FJ: "Fiji",
+  PG: "Papua New Guinea",
+  SB: "Solomon Islands",
+  VU: "Vanuatu",
+  NC: "New Caledonia",
+  PF: "French Polynesia",
+  WS: "Samoa",
+  TO: "Tonga",
+  KI: "Kiribati",
+  PW: "Palau",
+  FM: "Micronesia",
+  MH: "Marshall Islands",
+  NR: "Nauru",
+  TV: "Tuvalu",
+  AO: "Angola",
+  BW: "Botswana",
+  NA: "Namibia",
+  SZ: "Eswatini",
+  LS: "Lesotho",
+  MG: "Madagascar",
+  MU: "Mauritius",
+  SC: "Seychelles",
+  KM: "Comoros",
+  DJ: "Djibouti",
+  ER: "Eritrea",
+  GA: "Gabon",
+  GQ: "Equatorial Guinea",
+  CG: "Republic of the Congo",
+  CD: "Democratic Republic of the Congo",
+  CF: "Central African Republic",
+  TD: "Chad",
+  NE: "Niger",
+  ML: "Mali",
+  BF: "Burkina Faso",
+  GN: "Guinea",
+  GW: "Guinea-Bissau",
+  SL: "Sierra Leone",
+  LR: "Liberia",
+  TG: "Togo",
+  BJ: "Benin",
+  MR: "Mauritania",
+  GM: "Gambia",
+  CV: "Cape Verde",
+  ST: "Sao Tome and Principe",
+  BI: "Burundi",
+  MW: "Malawi",
 };
 
 const CRITICAL = [
@@ -94,14 +352,8 @@ function timeAgo(dateStr: string) {
   return `${Math.round(diff / 86400)}d ago`;
 }
 
-async function fetchNews(member: Member) {
-  const tag = COUNTRY_TAG[member.country];
-  const url = tag
-    ? `https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`
-    : `https://content.guardianapis.com/search?q=${encodeURIComponent(member.country)}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return (data.response?.results || []).map((item: any) => ({
+function mapGuardianResults(json: any) {
+  return (json.response?.results || []).map((item: any) => ({
     title: item.webTitle,
     section: item.sectionName,
     link: item.webUrl,
@@ -109,6 +361,47 @@ async function fetchNews(member: Member) {
     desc: item.fields?.trailText?.replace(/<[^>]+>/g, "") || "",
     level: classify(item.webTitle, item.fields?.trailText || ""),
   }));
+}
+
+async function fetchGuardian(url: string) {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return mapGuardianResults(data);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchNews(member: Member) {
+  const tag = COUNTRY_TAG[member.country];
+  const name = COUNTRY_NAME[member.country];
+
+  let primaryUrl: string;
+  if (tag) {
+    primaryUrl = `https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+  } else if (name) {
+    const q = encodeURIComponent(`"${name}"`);
+    primaryUrl = `https://content.guardianapis.com/search?q=${q}&section=world&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+  } else {
+    primaryUrl = `https://content.guardianapis.com/search?q=${encodeURIComponent(member.country)}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+  }
+
+  let results = await fetchGuardian(primaryUrl);
+
+  if (results.length < 5 && member.city) {
+    const cityUrl = `https://content.guardianapis.com/search?q=${encodeURIComponent(`"${member.city}"`)}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+    const supplemental = await fetchGuardian(cityUrl);
+    const seen = new Set(results.map((r: any) => r.link));
+    for (const item of supplemental) {
+      if (!seen.has(item.link)) {
+        results.push(item);
+        seen.add(item.link);
+      }
+    }
+  }
+
+  return results;
 }
 
 export default function NewsScreen() {
@@ -119,23 +412,38 @@ export default function NewsScreen() {
 
   useEffect(() => {
     if (!members[active]) return;
+    const member = members[active];
     setLoading(true);
     setNews([]);
-    fetchNews(members[active])
-      .then((items) => {
-        setNews(
-          items.sort(
-            (a: any, b: any) =>
-              ({ critical: 0, important: 1, normal: 2 })[a.level as string]! -
-              { critical: 0, important: 1, normal: 2 }[b.level as string]!,
-          ),
-        );
-      })
-      .finally(() => setLoading(false));
-    const t = setInterval(
-      () => fetchNews(members[active]).then(setNews),
-      90000,
-    );
+
+    const rank: Record<string, number> = { critical: 0, important: 1, normal: 2 };
+
+    const sortItems = (items: any[]) =>
+      items.sort((a: any, b: any) => {
+        const r = (rank[a.level] ?? 2) - (rank[b.level] ?? 2);
+        if (r !== 0) return r;
+        return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+      });
+
+    const load = async () => {
+      const items = await fetchNews(member);
+      const sorted = sortItems(items);
+      setNews(sorted);
+      for (const article of sorted) {
+        if (article.level === "critical") {
+          notifyCritical(member, {
+            title: article.title,
+            link: article.link,
+            desc: article.desc,
+          }).catch(() => {});
+        }
+      }
+    };
+
+    load().finally(() => setLoading(false));
+    const t = setInterval(() => {
+      load().catch(() => {});
+    }, 90000);
     return () => clearInterval(t);
   }, [active, members.length]);
 
