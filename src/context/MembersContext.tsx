@@ -13,6 +13,11 @@ export type Member = {
   lon: number;
   wakeHour: number;
   sleepHour: number;
+  birthday?: string;        // "YYYY-MM-DD"
+  anniversary?: string;     // "YYYY-MM-DD"
+  hometown?: string;        // free text
+  occupation?: string;      // free text
+  importantDates?: Array<{ label: string; date: string }>; // up to 5
 };
 
 const DEFAULTS: Member[] = [
