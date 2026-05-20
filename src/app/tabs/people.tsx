@@ -1,9 +1,11 @@
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import {
   Alert,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -142,6 +144,15 @@ function MemberForm({
   const [hasSearched, setHasSearched] = useState(false);
   const [searching, setSearching] = useState(false);
 
+  const [birthday, setBirthday] = useState<string>(initial?.birthday || '');
+  const [anniversary, setAnniversary] = useState<string>(initial?.anniversary || '');
+  const [hometown, setHometown] = useState(initial?.hometown || '');
+  const [occupation, setOccupation] = useState(initial?.occupation || '');
+  const [importantDates, setImportantDates] = useState<Array<{label:string;date:string}>>(initial?.importantDates || []);
+  const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
+  const [showAnniversaryPicker, setShowAnniversaryPicker] = useState(false);
+  const [importantDatePickerIndex, setImportantDatePickerIndex] = useState<number|null>(null);
+
   async function pickPhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -179,6 +190,11 @@ function MemberForm({
       ...cityResult,
       wakeHour: initial?.wakeHour ?? 7,
       sleepHour: initial?.sleepHour ?? 22,
+      birthday,
+      anniversary,
+      hometown,
+      occupation,
+      importantDates,
     });
   }
 
@@ -186,7 +202,11 @@ function MemberForm({
   const avatarColor = initial ? getAvatarColor(initial.id) : "#2d3a5a";
 
   return (
-    <View style={f.modal}>
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      style={f.modal}
+    >
       <Text style={f.title}>{initial ? "Edit Profile" : "Add Person"}</Text>
 
       <Text style={f.label}>PHOTO</Text>
@@ -231,7 +251,118 @@ function MemberForm({
         ))}
       </ScrollView>
 
-      <Text style={f.label}>CITY</Text>
+      <Text style={f.label}>HOMETOWN</Text>
+      <TextInput
+        style={f.input}
+        value={hometown}
+        onChangeText={setHometown}
+        placeholder="City / Town they grew up in"
+        placeholderTextColor="rgba(255,255,255,0.3)"
+      />
+
+      <Text style={f.label}>OCCUPATION</Text>
+      <TextInput
+        style={f.input}
+        value={occupation}
+        onChangeText={setOccupation}
+        placeholder="Teacher, Engineer, Retired…"
+        placeholderTextColor="rgba(255,255,255,0.3)"
+      />
+
+      <Text style={f.label}>BIRTHDAY</Text>
+      <TouchableOpacity
+        style={f.dateBtn}
+        onPress={() => setShowBirthdayPicker(true)}
+      >
+        <Text style={f.dateBtnText}>
+          {birthday ? birthday : "Tap to add birthday"}
+        </Text>
+      </TouchableOpacity>
+      {showBirthdayPicker && (
+        <DateTimePicker
+          value={birthday ? new Date(birthday) : new Date(1980, 0, 1)}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          maximumDate={new Date()}
+          onChange={(_, d) => { setShowBirthdayPicker(false); if (d) setBirthday(d.toISOString().split('T')[0]); }}
+        />
+      )}
+
+      <Text style={f.label}>ANNIVERSARY</Text>
+      <TouchableOpacity
+        style={f.dateBtn}
+        onPress={() => setShowAnniversaryPicker(true)}
+      >
+        <Text style={f.dateBtnText}>
+          {anniversary ? anniversary : "Tap to add anniversary"}
+        </Text>
+      </TouchableOpacity>
+      {showAnniversaryPicker && (
+        <DateTimePicker
+          value={anniversary ? new Date(anniversary) : new Date(1980, 0, 1)}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          maximumDate={new Date()}
+          onChange={(_, d) => { setShowAnniversaryPicker(false); if (d) setAnniversary(d.toISOString().split('T')[0]); }}
+        />
+      )}
+
+      <Text style={f.label}>IMPORTANT DATES</Text>
+      {importantDates.map((item, i) => (
+        <View key={i} style={f.importantDateRow}>
+          <TextInput
+            style={[f.input, { flex: 1, marginBottom: 0 }]}
+            value={item.label}
+            onChangeText={(text) => {
+              const updated = [...importantDates];
+              updated[i] = { ...updated[i], label: text };
+              setImportantDates(updated);
+            }}
+            placeholder="Label (e.g. Graduation)"
+            placeholderTextColor="rgba(255,255,255,0.3)"
+          />
+          <TouchableOpacity
+            style={f.dateBtn2}
+            onPress={() => setImportantDatePickerIndex(i)}
+          >
+            <Text style={f.dateBtnText2}>{item.date || "Date"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={f.removeBtn}
+            onPress={() => {
+              const updated = importantDates.filter((_, idx) => idx !== i);
+              setImportantDates(updated);
+            }}
+          >
+            <Text style={f.removeBtnText}>X</Text>
+          </TouchableOpacity>
+          {importantDatePickerIndex === i && (
+            <DateTimePicker
+              value={item.date ? new Date(item.date) : new Date()}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              onChange={(_, d) => {
+                setImportantDatePickerIndex(null);
+                if (d) {
+                  const updated = [...importantDates];
+                  updated[i] = { ...updated[i], date: d.toISOString().split('T')[0] };
+                  setImportantDates(updated);
+                }
+              }}
+            />
+          )}
+        </View>
+      ))}
+      {importantDates.length < 5 && (
+        <TouchableOpacity
+          style={f.addDateBtn}
+          onPress={() => setImportantDates([...importantDates, { label: '', date: new Date().toISOString().split('T')[0] }])}
+        >
+          <Text style={f.addDateText}>+ Add Date</Text>
+        </TouchableOpacity>
+      )}
+
+      <Text style={[f.label, { marginTop: 8 }]}>CITY</Text>
       <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
         <TextInput
           style={[f.input, { flex: 1, marginBottom: 0 }]}
@@ -257,6 +388,7 @@ function MemberForm({
             return (
               <TouchableOpacity
                 key={`${r.lat}-${r.lon}-${i}`}
+                activeOpacity={0.6}
                 style={[f.resultRow, isSelected && f.resultRowActive]}
                 onPress={() => setCityResult(r)}
               >
@@ -290,7 +422,8 @@ function MemberForm({
           <Text style={{ color: "white", fontWeight: "700" }}>Save</Text>
         </TouchableOpacity>
       </View>
-    </View>
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
@@ -298,6 +431,7 @@ export default function PeopleScreen() {
   const { members, addMember, updateMember, removeMember } = useMembers();
   const [editing, setEditing] = useState<Member | null>(null);
   const [adding, setAdding] = useState(false);
+  const [zoomUri, setZoomUri] = useState<string | null>(null);
 
   function handleSaveEdit(data: any) {
     if (editing) {
@@ -331,20 +465,22 @@ export default function PeopleScreen() {
       >
         {members.map((m) => (
           <View key={m.id} style={p.card}>
-            {m.photoUri ? (
-              <Image source={{ uri: m.photoUri }} style={p.avatarCircle} />
-            ) : (
-              <View
-                style={[
-                  p.avatarCircle,
-                  { backgroundColor: getAvatarColor(m.id) },
-                ]}
-              >
-                <Text style={p.avatarInitial}>
-                  {m.name[0].toUpperCase()}
-                </Text>
-              </View>
-            )}
+            <TouchableOpacity onPress={() => m.photoUri ? setZoomUri(m.photoUri) : null}>
+              {m.photoUri ? (
+                <Image source={{ uri: m.photoUri }} style={p.avatarCircle} />
+              ) : (
+                <View
+                  style={[
+                    p.avatarCircle,
+                    { backgroundColor: getAvatarColor(m.id) },
+                  ]}
+                >
+                  <Text style={p.avatarInitial}>
+                    {m.name[0].toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
             <View style={{ flex: 1 }}>
               <Text style={p.name}>{m.name}</Text>
               <Text style={p.sub}>
@@ -403,6 +539,22 @@ export default function PeopleScreen() {
         <View style={{ flex: 1, backgroundColor: "#0f0f1e", padding: 24 }}>
           <MemberForm onSave={handleSaveAdd} onClose={() => setAdding(false)} />
         </View>
+      </Modal>
+
+      <Modal visible={!!zoomUri} transparent animationType="fade">
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}
+          activeOpacity={1}
+          onPress={() => setZoomUri(null)}
+        >
+          {zoomUri && (
+            <Image
+              source={{ uri: zoomUri }}
+              style={{ width: '90%', aspectRatio: 1, borderRadius: 16 }}
+              resizeMode="cover"
+            />
+          )}
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -517,6 +669,65 @@ const f = StyleSheet.create({
     fontSize: 15,
     padding: 13,
     marginBottom: 16,
+  },
+  dateBtn: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 12,
+    padding: 13,
+    marginBottom: 16,
+  },
+  dateBtnText: {
+    color: "#f0f0f6",
+    fontSize: 15,
+  },
+  importantDateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
+  },
+  dateBtn2: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 13,
+    minWidth: 90,
+    alignItems: "center",
+  },
+  dateBtnText2: {
+    color: "#f0f0f6",
+    fontSize: 13,
+  },
+  removeBtn: {
+    backgroundColor: "rgba(239,68,68,0.15)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.3)",
+  },
+  removeBtnText: {
+    color: "#f87171",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  addDateBtn: {
+    backgroundColor: "rgba(124,106,247,0.15)",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(124,106,247,0.3)",
+    marginBottom: 16,
+  },
+  addDateText: {
+    color: "#a78bfa",
+    fontSize: 13,
+    fontWeight: "600",
   },
   relBtn: {
     paddingHorizontal: 14,

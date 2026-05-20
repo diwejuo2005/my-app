@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useFonts, DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
 import { Tabs, useRouter } from "expo-router";
-import { SafeAreaView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, SafeAreaView, Text, TouchableOpacity, View } from "react-native";
 
 export default function TabLayout() {
   const router = useRouter();
+  const [fontsLoaded] = useFonts({ DancingScript_700Bold });
 
   return (
     <Tabs
@@ -21,15 +23,34 @@ export default function TabLayout() {
                   alignItems: "center",
                 }}
               >
+                <TouchableOpacity
+                  onPress={() => router.push("/about")}
+                  style={{ position: "absolute", left: 16, top: 8, padding: 6 }}
+                >
+                  <Ionicons name="information-circle-outline" size={22} color="#a78bfa" />
+                </TouchableOpacity>
                 <Text
                   style={{
                     color: "#f0f0f6",
-                    fontSize: 26,
-                    fontWeight: "800",
-                    letterSpacing: -0.5,
+                    fontSize: 32,
+                    fontFamily: fontsLoaded ? 'DancingScript_700Bold' : undefined,
+                    fontWeight: fontsLoaded ? undefined : "800",
+                    letterSpacing: 0,
                   }}
                 >
                   Ensemble
+                </Text>
+                <Text
+                  style={{
+                    color: "rgba(255,255,255,0.4)",
+                    fontSize: 10,
+                    fontWeight: "500",
+                    letterSpacing: 1.5,
+                    textTransform: 'uppercase',
+                    marginTop: 1,
+                  }}
+                >
+                  everyone, everywhere, all together
                 </Text>
                 <Text
                   style={{
