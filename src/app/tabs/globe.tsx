@@ -190,16 +190,38 @@ function startGlobe() {
           pinInner +
           '</div>' +
           '<div style="background:rgba(10,8,30,0.75);border-radius:6px;padding:2px 7px;white-space:nowrap;color:rgba(255,255,255,0.95);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;border:1px solid rgba(124,106,247,0.4)">' + d.city + '</div>';
-        function firePin(e) {
-          e.stopPropagation();
-          if (e.cancelable) e.preventDefault();
-          try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city:d.city, memberIds:d.ids})); } catch(ex) {}
-        }
-        wrap.addEventListener('click', firePin);
-        wrap.addEventListener('touchstart', function(e) { e.stopPropagation(); });
-        wrap.addEventListener('touchend', firePin);
         return wrap;
       });
+
+    // Document-level tap detector: reliable pin clicks on iOS WKWebView
+    var tapStart = null;
+    document.addEventListener('touchstart', function(e) {
+      if (e.touches.length !== 1) { tapStart = null; return; }
+      tapStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    }, { passive: true });
+    document.addEventListener('touchend', function(e) {
+      if (!tapStart || e.changedTouches.length !== 1) { tapStart = null; return; }
+      var ex = e.changedTouches[0].clientX;
+      var ey = e.changedTouches[0].clientY;
+      var dx = ex - tapStart.x;
+      var dy = ey - tapStart.y;
+      var dt = Date.now() - tapStart.t;
+      tapStart = null;
+      if (Math.sqrt(dx * dx + dy * dy) > 14 || dt > 500) return; // drag or hold
+      var hit = null;
+      clusters.forEach(function(d) {
+        try {
+          var sc = myGlobe.getScreenCoords(d.lat, d.lng, 0.01);
+          if (!sc) return;
+          var ddx = ex - sc.x;
+          var ddy = ey - sc.y;
+          if (Math.sqrt(ddx * ddx + ddy * ddy) < 48) hit = d;
+        } catch(e2) {}
+      });
+      if (hit) {
+        try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city: hit.city, memberIds: hit.ids})); } catch(e3) {}
+      }
+    }, false);
 
     // Send pin screen-coordinates to React Native so it can render native tap targets
     var posTimer = null;
@@ -331,13 +353,15 @@ export default function GlobeScreen() {
               key={p.city}
               style={{
                 position: "absolute",
-                left: p.x - 30,
-                top: p.y - 30,
-                width: 60,
-                height: 60,
+                left: p.x - 50,
+                top: p.y - 50,
+                width: 100,
+                height: 100,
+                backgroundColor: "rgba(0,0,0,0.001)",
               }}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
               onPress={() => setSelectedCity({ city: p.city, memberIds: p.ids })}
-              activeOpacity={0.3}
+              activeOpacity={1}
             />
           ))}
         </View>

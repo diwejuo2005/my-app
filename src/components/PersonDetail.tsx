@@ -485,7 +485,7 @@ function ChatTab({ member }: { member: Member }) {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <FlatList ref={listRef} data={messages} keyExtractor={(item) => item.id} renderItem={renderMessage}
         contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 16 }} showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
@@ -1071,6 +1071,7 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={d.root}>
         {/* Header */}
         <View style={d.header}>
@@ -1125,6 +1126,7 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
           onSave={handleUpdate}
         />
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
