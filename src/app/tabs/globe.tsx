@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
+  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -9,198 +10,54 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import { Member, useMembers } from "../../context/MembersContext";
 
-const AVATAR_COLORS = ["#2d3a5a", "#2d4a3e", "#3a2d4a", "#4a3a2d", "#2d4a4a"];
+const { width: MAP_W, height: MAP_H } = Dimensions.get("window");
 
+const AVATAR_COLORS = ["#2d3a5a", "#2d4a3e", "#3a2d4a", "#4a3a2d", "#2d4a4a"];
 function getAvatarColor(id: number) {
   return AVATAR_COLORS[id % AVATAR_COLORS.length];
 }
 
-export default function GlobeScreen() {
-  const { members } = useMembers();
-  const [selectedCity, setSelectedCity] = useState<{
-    city: string;
-    memberIds: number[];
-  } | null>(null);
+function latLonToXY(lat: number, lon: number) {
+  const x = ((lon + 180) / 360) * MAP_W;
+  const y = ((90 - lat) / 180) * MAP_H;
+  return { x, y };
+}
 
-  const cityMembers =
-    selectedCity !== null
-      ? members.filter((m) => selectedCity.memberIds.includes(m.id))
-      : [];
+type Cluster = { city: string; lat: number; lon: number; members: Member[] };
 
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:#07080f; overflow:hidden; }
-</style>
-</head>
-<body>
-<div id="g"></div>
-<script src="https://unpkg.com/globe.gl@2"></script>
-<script>
-  const members = ${JSON.stringify(members.map(function(m) { return { id: m.id, name: m.name, lat: m.lat, lon: m.lon, city: m.city }; }))};
-  const colors = ['#2d3a5a','#2d4a3e','#3a2d4a','#4a3a2d','#2d4a4a'];
-
-  // Group by city
-  const cityMap = {};
-  members.forEach(m => {
-    if (!cityMap[m.city]) cityMap[m.city] = { city: m.city, lat: m.lat, lon: m.lon, members: [] };
-    cityMap[m.city].members.push(m);
-  });
-  const clusters = Object.values(cityMap);
-
-  const globe = Globe()(document.getElementById('g'))
-    .width(window.innerWidth)
-    .height(window.innerHeight)
-    .backgroundColor('#07080f')
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
-    .atmosphereColor('#7c6af7')
-    .atmosphereAltitude(0.18)
-    .htmlElementsData(clusters)
-    .htmlLat('lat')
-    .htmlLng('lon')
-    .htmlElement(d => {
-      const colors = ['#2d3a5a','#2d4a3e','#3a2d4a','#4a3a2d','#2d4a4a'];
-
-      const wrap = document.createElement('div');
-      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
-
-      // Pin head (circle)
-      const head = document.createElement('div');
-      const isMulti = d.members.length > 1;
-      head.style.cssText = [
-        'width:34px;height:34px;border-radius:50%;',
-        'background:', isMulti ? '#7c6af7' : colors[d.members[0].id % 5], ';',
-        'border:2.5px solid rgba(255,255,255,0.85);',
-        'display:flex;align-items:center;justify-content:center;',
-        'box-shadow:0 2px 8px rgba(0,0,0,0.5);',
-        'overflow:hidden;'
-      ].join('');
-
-      if (isMulti) {
-        head.innerHTML = '<span style="color:white;font-weight:800;font-size:13px;">' + d.members.length + '</span>';
-      } else {
-        const m = d.members[0];
-        if (m.photoUri) {
-          head.innerHTML = '<img src="' + m.photoUri + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentNode.innerHTML=\'<span style=color:white;font-weight:700;font-size:14px>\' + m.name[0].toUpperCase() + \'</span>\'">';
-        } else {
-          head.innerHTML = '<span style="color:white;font-weight:700;font-size:14px;">' + m.name[0].toUpperCase() + '</span>';
-        }
-      }
-
-      // Pin tail (downward triangle)
-      const tail = document.createElement('div');
-      tail.style.cssText = [
-        'width:0;height:0;',
-        'border-left:7px solid transparent;',
-        'border-right:7px solid transparent;',
-        'border-top:11px solid ', isMulti ? '#7c6af7' : colors[d.members[0].id % 5], ';',
-        'margin-top:-1px;',
-        'filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));'
-      ].join('');
-
-      // City label
-      const label = document.createElement('div');
-      label.style.cssText = 'color:white;font-size:9px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.9);white-space:nowrap;max-width:90px;text-align:center;overflow:hidden;text-overflow:ellipsis;margin-top:3px;';
-      label.textContent = d.city;
-
-      wrap.onclick = function() {
-        const ids = d.members.map(function(m) { return m.id; });
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'pinClick', memberIds: ids, city: d.city }));
-      };
-
-      wrap.appendChild(head);
-      wrap.appendChild(tail);
-      wrap.appendChild(label);
-      return wrap;
-    });
-
-  globe.controls().autoRotate = true;
-  globe.controls().autoRotateSpeed = 0.6;
-  globe.controls().enableZoom = true;
-  globe.pointOfView({ lat: 20, lng: 0, altitude: 2.2 });
-  window.addEventListener('resize', () => globe.width(window.innerWidth).height(window.innerHeight));
-</script>
-</body>
-</html>`;
+function Pin({ cluster, onPress }: { cluster: Cluster; onPress: () => void }) {
+  const isMulti = cluster.members.length > 1;
+  const color = isMulti ? "#7c6af7" : getAvatarColor(cluster.members[0].id);
+  const m = cluster.members[0];
 
   return (
-    <View style={s.root}>
-      <StatusBar barStyle="light-content" />
-      <WebView
-        source={{ html }}
-        style={s.web}
-        scrollEnabled={false}
-        javaScriptEnabled
-        originWhitelist={["*"]}
-        allowUniversalAccessFromFileURLs
-        mixedContentMode="always"
-        allowFileAccessFromFileURLs
-        onMessage={(e) => {
-          try {
-            const d = JSON.parse(e.nativeEvent.data);
-            if (d.type === "pinClick") {
-              setSelectedCity({ city: d.city, memberIds: d.memberIds });
-            }
-          } catch {}
-        }}
-      />
-
-      <Modal
-        visible={selectedCity !== null}
-        transparent
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedCity(null)}
-      >
-        <View style={s.modalOverlay}>
-          <View style={s.modalSheet}>
-            <View style={s.modalHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.modalCity}>{selectedCity?.city}</Text>
-                <Text style={s.modalSubtitle}>
-                  {cityMembers.length}{" "}
-                  {cityMembers.length === 1 ? "person" : "people"} here
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={s.closeBtn}
-                onPress={() => setSelectedCity(null)}
-              >
-                <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
-              </TouchableOpacity>
-            </View>
-
-            <FlatList
-              data={cityMembers}
-              keyExtractor={(item) => String(item.id)}
-              contentContainerStyle={{ paddingBottom: 32 }}
-              renderItem={({ item }) => (
-                <MemberRow member={item} />
-              )}
-            />
-          </View>
-        </View>
-      </Modal>
-    </View>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={s.pinContainer}>
+      <View style={[s.pinHead, { backgroundColor: color }]}>
+        {isMulti ? (
+          <Text style={s.pinCount}>{cluster.members.length}</Text>
+        ) : m.photoUri ? (
+          <Image source={{ uri: m.photoUri }} style={s.pinPhoto} />
+        ) : (
+          <Text style={s.pinInitial}>{m.name[0].toUpperCase()}</Text>
+        )}
+      </View>
+      <View style={[s.pinTail, { borderTopColor: color }]} />
+      <Text style={s.pinLabel} numberOfLines={1}>{cluster.city}</Text>
+    </TouchableOpacity>
   );
 }
 
 function MemberRow({ member }: { member: Member }) {
-  const avatarColor = getAvatarColor(member.id);
+  const bg = getAvatarColor(member.id);
   return (
     <View style={s.memberRow}>
       {member.photoUri ? (
         <Image source={{ uri: member.photoUri }} style={s.memberAvatar} />
       ) : (
-        <View style={[s.memberAvatar, { backgroundColor: avatarColor }]}>
+        <View style={[s.memberAvatar, { backgroundColor: bg }]}>
           <Text style={s.memberInitial}>{member.name[0].toUpperCase()}</Text>
         </View>
       )}
@@ -212,9 +69,167 @@ function MemberRow({ member }: { member: Member }) {
   );
 }
 
+export default function GlobeScreen() {
+  const { members } = useMembers();
+  const [selectedCity, setSelectedCity] = useState<{
+    city: string;
+    memberIds: number[];
+  } | null>(null);
+
+  const clusters = useMemo<Cluster[]>(() => {
+    const map: Record<string, Cluster> = {};
+    members.forEach((m) => {
+      if (!map[m.city])
+        map[m.city] = { city: m.city, lat: m.lat, lon: m.lon, members: [] };
+      map[m.city].members.push(m);
+    });
+    return Object.values(map);
+  }, [members]);
+
+  const cityMembers = selectedCity
+    ? members.filter((m) => selectedCity.memberIds.includes(m.id))
+    : [];
+
+  const gridLats = [-60, -30, 30, 60];
+  const gridLons = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
+
+  return (
+    <View style={s.root}>
+      <StatusBar barStyle="light-content" />
+
+      <View style={s.mapArea}>
+        {gridLats.map((lat) => {
+          const { y } = latLonToXY(lat, 0);
+          return <View key={lat} style={[s.gridH, { top: y }]} />;
+        })}
+        {gridLons.map((lon) => {
+          const { x } = latLonToXY(0, lon);
+          return <View key={lon} style={[s.gridV, { left: x }]} />;
+        })}
+        <View style={[s.equator, { top: MAP_H / 2 }]} />
+
+        {clusters.map((cluster) => {
+          const { x, y } = latLonToXY(cluster.lat, cluster.lon);
+          return (
+            <View key={cluster.city} style={[s.pinAnchor, { left: x, top: y }]}>
+              <Pin
+                cluster={cluster}
+                onPress={() =>
+                  setSelectedCity({
+                    city: cluster.city,
+                    memberIds: cluster.members.map((m) => m.id),
+                  })
+                }
+              />
+            </View>
+          );
+        })}
+      </View>
+
+      <Modal
+        visible={selectedCity !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedCity(null)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.modalCity}>{selectedCity?.city}</Text>
+                <Text style={s.modalSub}>
+                  {cityMembers.length}{" "}
+                  {cityMembers.length === 1 ? "person" : "people"} here
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={s.closeBtn}
+                onPress={() => setSelectedCity(null)}
+              >
+                <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={cityMembers}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={{ paddingBottom: 40 }}
+              renderItem={({ item }) => <MemberRow member={item} />}
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#07080f" },
-  web: { flex: 1, backgroundColor: "#07080f" },
+  mapArea: { flex: 1, backgroundColor: "#07080f" },
+  gridH: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  gridV: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  equator: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: "rgba(167,139,250,0.3)",
+  },
+  pinAnchor: {
+    position: "absolute",
+    transform: [{ translateX: -17 }, { translateY: -56 }],
+  },
+  pinContainer: { alignItems: "center" },
+  pinHead: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2.5,
+    borderColor: "rgba(255,255,255,0.85)",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+  },
+  pinPhoto: { width: 30, height: 30, borderRadius: 15 },
+  pinCount: { color: "white", fontWeight: "800", fontSize: 13 },
+  pinInitial: { color: "white", fontWeight: "700", fontSize: 14 },
+  pinTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 7,
+    borderRightWidth: 7,
+    borderTopWidth: 11,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    marginTop: -1,
+  },
+  pinLabel: {
+    color: "rgba(255,255,255,0.9)",
+    fontSize: 9,
+    fontWeight: "600",
+    textAlign: "center",
+    maxWidth: 80,
+    marginTop: 2,
+    textShadowColor: "rgba(0,0,0,0.9)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
@@ -235,16 +250,8 @@ const s = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 20,
   },
-  modalCity: {
-    color: "#f0f0f6",
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  modalSubtitle: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 13,
-    marginTop: 3,
-  },
+  modalCity: { color: "#f0f0f6", fontSize: 22, fontWeight: "800" },
+  modalSub: { color: "rgba(255,255,255,0.5)", fontSize: 13, marginTop: 3 },
   closeBtn: {
     width: 36,
     height: 36,
@@ -269,19 +276,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  memberInitial: {
-    color: "white",
-    fontWeight: "700",
-    fontSize: 20,
-  },
-  memberName: {
-    color: "#f0f0f6",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  memberRel: {
-    color: "rgba(255,255,255,0.45)",
-    fontSize: 13,
-    marginTop: 2,
-  },
+  memberInitial: { color: "white", fontWeight: "700", fontSize: 20 },
+  memberName: { color: "#f0f0f6", fontSize: 16, fontWeight: "700" },
+  memberRel: { color: "rgba(255,255,255,0.45)", fontSize: 13, marginTop: 2 },
 });

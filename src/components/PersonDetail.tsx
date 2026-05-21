@@ -565,6 +565,7 @@ function EditModal({
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
   const [showAnniversaryPicker, setShowAnniversaryPicker] = useState(false);
   const [cityQuery, setCityQuery] = useState(member.city || '');
+  const editScrollRef = useRef<ScrollView>(null);
   const [cityResult, setCityResult] = useState<CityResult | null>({
     city: member.city,
     country: member.country,
@@ -643,8 +644,9 @@ function EditModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <View style={{ flex: 1, backgroundColor: '#07080f' }}>
+      <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#07080f' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
+          ref={editScrollRef}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: 24, paddingBottom: 80 }}
           showsVerticalScrollIndicator={false}
@@ -756,6 +758,9 @@ function EditModal({
               onSubmitEditing={searchCity}
               placeholder="Search city..."
               placeholderTextColor="rgba(255,255,255,0.3)"
+              onFocus={() => {
+                setTimeout(() => editScrollRef.current?.scrollToEnd({ animated: true }), 300);
+              }}
             />
             <TouchableOpacity style={e.searchBtn} onPress={searchCity}>
               <Text style={{ color: 'white', fontWeight: '600' }}>
@@ -808,7 +813,7 @@ function EditModal({
             </TouchableOpacity>
           </View>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
