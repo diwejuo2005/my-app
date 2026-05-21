@@ -937,6 +937,87 @@ const wh = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
+// Event block (inside time grid)
+// ---------------------------------------------------------------------------
+
+type EventBlockProps = {
+  event: CalendarEvent;
+  siblingIndex: number;
+  totalSiblings: number;
+  onPress: (ev: CalendarEvent) => void;
+  key?: string | number;
+};
+
+function EventBlock({ event, siblingIndex, totalSiblings, onPress }: EventBlockProps) {
+  const startParts = event.startTime.split(":");
+  const endParts = event.endTime.split(":");
+  const startH = parseInt(startParts[0], 10);
+  const startM = parseInt(startParts[1], 10);
+  const endH = parseInt(endParts[0], 10);
+  const endM = parseInt(endParts[1], 10);
+
+  const top = timeToY(startH, startM);
+  const height = Math.max(
+    timeToY(endH, endM) - top,
+    22 // minimum visible height
+  );
+
+  // For overlapping events: tile horizontally
+  const widthFraction = totalSiblings > 1 ? 0.88 / totalSiblings : 0.92;
+  const width = DAY_COL_WIDTH * widthFraction;
+  const left = siblingIndex * (DAY_COL_WIDTH * (0.88 / totalSiblings));
+
+  return (
+    <TouchableOpacity
+      style={[
+        eb.block,
+        {
+          top,
+          height,
+          width,
+          left,
+          backgroundColor: event.color + "D9", // 85% opacity
+          borderLeftColor: event.color,
+        },
+      ]}
+      onPress={() => onPress(event)}
+      activeOpacity={0.75}
+    >
+      <Text style={eb.title} numberOfLines={height > 40 ? 2 : 1}>
+        {event.title}
+      </Text>
+      {height > 38 && (
+        <Text style={eb.time}>
+          {formatTime12(event.startTime)}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const eb = StyleSheet.create({
+  block: {
+    position: "absolute",
+    borderRadius: 5,
+    borderLeftWidth: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    overflow: "hidden",
+  },
+  title: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 14,
+  },
+  time: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 9,
+    marginTop: 1,
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Time grid
 // ---------------------------------------------------------------------------
 
@@ -1049,86 +1130,6 @@ const tg = StyleSheet.create({
     height: HOUR_HEIGHT,
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.06)",
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Event block (inside time grid)
-// ---------------------------------------------------------------------------
-
-type EventBlockProps = {
-  event: CalendarEvent;
-  siblingIndex: number;
-  totalSiblings: number;
-  onPress: (ev: CalendarEvent) => void;
-};
-
-function EventBlock({ event, siblingIndex, totalSiblings, onPress }: EventBlockProps) {
-  const startParts = event.startTime.split(":");
-  const endParts = event.endTime.split(":");
-  const startH = parseInt(startParts[0], 10);
-  const startM = parseInt(startParts[1], 10);
-  const endH = parseInt(endParts[0], 10);
-  const endM = parseInt(endParts[1], 10);
-
-  const top = timeToY(startH, startM);
-  const height = Math.max(
-    timeToY(endH, endM) - top,
-    22 // minimum visible height
-  );
-
-  // For overlapping events: tile horizontally
-  const widthFraction = totalSiblings > 1 ? 0.88 / totalSiblings : 0.92;
-  const width = DAY_COL_WIDTH * widthFraction;
-  const left = siblingIndex * (DAY_COL_WIDTH * (0.88 / totalSiblings));
-
-  return (
-    <TouchableOpacity
-      style={[
-        eb.block,
-        {
-          top,
-          height,
-          width,
-          left,
-          backgroundColor: event.color + "D9", // 85% opacity
-          borderLeftColor: event.color,
-        },
-      ]}
-      onPress={() => onPress(event)}
-      activeOpacity={0.75}
-    >
-      <Text style={eb.title} numberOfLines={height > 40 ? 2 : 1}>
-        {event.title}
-      </Text>
-      {height > 38 && (
-        <Text style={eb.time}>
-          {formatTime12(event.startTime)}
-        </Text>
-      )}
-    </TouchableOpacity>
-  );
-}
-
-const eb = StyleSheet.create({
-  block: {
-    position: "absolute",
-    borderRadius: 5,
-    borderLeftWidth: 3,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    overflow: "hidden",
-  },
-  title: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
-    lineHeight: 14,
-  },
-  time: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 9,
-    marginTop: 1,
   },
 });
 
