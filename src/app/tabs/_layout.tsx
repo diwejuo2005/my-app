@@ -36,9 +36,10 @@ function ScrollableTabBar({ state, descriptors, navigation }: BottomTabBarProps)
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{
+          flexGrow: 1,
           flexDirection: "row",
           alignItems: "center",
-          paddingHorizontal: 8,
+          justifyContent: "space-evenly",
           height: 65,
         }}
       >

@@ -44,6 +44,7 @@ type NewsArticle = {
   link: string;
   pubDate: string;
   desc: string;
+  level: 'critical' | 'important' | 'normal';
 };
 
 type CityResult = {
@@ -164,19 +165,38 @@ function timeAgo(dateStr: string): string {
   return `${Math.round(diff / 86400)}d ago`;
 }
 
+const CRIT_KW = ["earthquake","flood","hurricane","tornado","explosion","attack","shooting","terrorism","disaster","emergency","evacuation","outbreak","pandemic","riot","coup","curfew","wildfire","tsunami","volcano"];
+const IMP_KW = ["election","protest","strike","war","conflict","recession","scandal","arrested","indicted","sanctions","crisis"];
+
+function classifyArticle(title: string, desc: string): 'critical' | 'important' | 'normal' {
+  const t = (title + ' ' + desc).toLowerCase();
+  if (CRIT_KW.some((k) => t.includes(k))) return 'critical';
+  if (IMP_KW.some((k) => t.includes(k))) return 'important';
+  return 'normal';
+}
+
 async function fetchMemberNews(member: Member): Promise<NewsArticle[]> {
   const tag = COUNTRY_TAG[member.country];
   const url = tag
-    ? `https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`
-    : `https://content.guardianapis.com/search?q=${encodeURIComponent(member.country)}&section=world&api-key=test&show-fields=trailText&page-size=10&order-by=newest`;
+    ? `https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`
+    : `https://content.guardianapis.com/search?q=${encodeURIComponent(member.country)}&section=world&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
   const res = await fetch(url);
   const data = await res.json();
-  return (data.response?.results || []).map((item: any) => ({
-    title: item.webTitle,
-    link: item.webUrl,
-    pubDate: item.webPublicationDate,
-    desc: (item.fields?.trailText || '').replace(/<[^>]+>/g, ''),
-  }));
+  const articles: NewsArticle[] = (data.response?.results || []).map((item: any) => {
+    const desc = (item.fields?.trailText || '').replace(/<[^>]+>/g, '');
+    return {
+      title: item.webTitle,
+      link: item.webUrl,
+      pubDate: item.webPublicationDate,
+      desc,
+      level: classifyArticle(item.webTitle, desc),
+    };
+  });
+  const RANK: Record<string, number> = { critical: 0, important: 1, normal: 2 };
+  return articles.sort((a, b) => {
+    const r = (RANK[a.level] ?? 2) - (RANK[b.level] ?? 2);
+    return r !== 0 ? r : new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+  });
 }
 
 async function searchCities(query: string): Promise<CityResult[]> {
@@ -219,6 +239,17 @@ function Avatar({ member, size = 56 }: { member: Member; size?: number }) {
 
 // ─── NEWS TAB ─────────────────────────────────────────────────────────────────
 
+function newsBorderColor(level: string) {
+  if (level === 'critical') return '#ef4444';
+  if (level === 'important') return '#f59e0b';
+  return 'rgba(34,197,94,0.45)';
+}
+function newsTitleColor(level: string) {
+  if (level === 'critical') return '#fca5a5';
+  if (level === 'important') return '#fde68a';
+  return 'rgba(255,255,255,0.9)';
+}
+
 function NewsTab({ member }: { member: Member }) {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -226,10 +257,13 @@ function NewsTab({ member }: { member: Member }) {
   useEffect(() => {
     setLoading(true);
     setArticles([]);
-    fetchMemberNews(member)
-      .then(setArticles)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    const load = () =>
+      fetchMemberNews(member)
+        .then((items) => { setArticles(items); setLoading(false); })
+        .catch(() => setLoading(false));
+    load();
+    const interval = setInterval(load, 60000);
+    return () => clearInterval(interval);
   }, [member.id]);
 
   if (loading) {
@@ -253,11 +287,19 @@ function NewsTab({ member }: { member: Member }) {
       {articles.map((article, i) => (
         <TouchableOpacity
           key={i}
-          style={d.newsCard}
+          style={[d.newsCard, { borderColor: newsBorderColor(article.level), borderWidth: article.level !== 'normal' ? 2 : 1 }]}
           activeOpacity={0.75}
           onPress={() => Linking.openURL(article.link)}
         >
-          <Text style={d.newsTitle}>{article.title}</Text>
+          {article.level !== 'normal' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: newsBorderColor(article.level) }} />
+              <Text style={{ fontSize: 9, fontWeight: '800', letterSpacing: 1, color: newsBorderColor(article.level), textTransform: 'uppercase' }}>
+                {article.level === 'critical' ? 'CRITICAL' : 'IMPORTANT'}
+              </Text>
+            </View>
+          )}
+          <Text style={[d.newsTitle, { color: newsTitleColor(article.level) }]}>{article.title}</Text>
           {!!article.desc && (
             <Text style={d.newsDesc} numberOfLines={2}>
               {article.desc}
