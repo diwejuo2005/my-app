@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { Stack } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Member, useMembers } from "../context/MembersContext";
 import {
   Alert,
   Image,
@@ -27,11 +28,42 @@ type UserProfile = {
   phone: string;
   email: string;
   hometown: string;
-  occupation: string;
   pronouns: string;
   wakeHour: number;  // 0–23
   sleepHour: number; // 0–23
 };
+
+type UpcomingDate = { name: string; type: string; date: Date; daysAway: number };
+
+function getUpcomingDates(members: Member[]): UpcomingDate[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const results: UpcomingDate[] = [];
+  for (const m of members) {
+    const fields: Array<[string | undefined, string]> = [
+      [m.birthday, 'Birthday'],
+      [m.anniversary, 'Anniversary'],
+    ];
+    for (const [raw, type] of fields) {
+      if (!raw) continue;
+      const parts = raw.split('-').map(Number);
+      const occurrence = new Date(today.getFullYear(), parts[1] - 1, parts[2]);
+      if (occurrence < today) occurrence.setFullYear(today.getFullYear() + 1);
+      const daysAway = Math.round((occurrence.getTime() - today.getTime()) / 86400000);
+      if (daysAway <= 60) results.push({ name: m.name, type, date: occurrence, daysAway });
+    }
+    if (m.importantDates) {
+      for (const d of m.importantDates) {
+        const parts = d.date.split('-').map(Number);
+        const occurrence = new Date(today.getFullYear(), parts[1] - 1, parts[2]);
+        if (occurrence < today) occurrence.setFullYear(today.getFullYear() + 1);
+        const daysAway = Math.round((occurrence.getTime() - today.getTime()) / 86400000);
+        if (daysAway <= 60) results.push({ name: m.name, type: d.label, date: occurrence, daysAway });
+      }
+    }
+  }
+  return results.sort((a, b) => a.daysAway - b.daysAway);
+}
 
 const STORAGE_KEY = "ensemble_user_profile";
 
@@ -88,6 +120,7 @@ function HourPicker({
 }
 
 export default function ProfileScreen() {
+  const { members } = useMembers();
   const [name, setName] = useState("");
   const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
   const [bio, setBio] = useState("");
@@ -96,11 +129,12 @@ export default function ProfileScreen() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [hometown, setHometown] = useState("");
-  const [occupation, setOccupation] = useState("");
   const [pronouns, setPronouns] = useState("");
   const [wakeHour, setWakeHour] = useState(7);
   const [sleepHour, setSleepHour] = useState(23);
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
+
+  const upcomingDates = useMemo(() => getUpcomingDates(members), [members]);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
@@ -114,7 +148,6 @@ export default function ProfileScreen() {
         setPhone(p.phone || "");
         setEmail(p.email || "");
         setHometown(p.hometown || "");
-        setOccupation(p.occupation || "");
         setPronouns(p.pronouns || "");
         setWakeHour(typeof p.wakeHour === "number" ? p.wakeHour : 7);
         setSleepHour(typeof p.sleepHour === "number" ? p.sleepHour : 23);
@@ -148,7 +181,6 @@ export default function ProfileScreen() {
       phone: phone.trim(),
       email: email.trim(),
       hometown: hometown.trim(),
-      occupation: occupation.trim(),
       pronouns: pronouns.trim(),
       wakeHour,
       sleepHour,
@@ -298,14 +330,6 @@ export default function ProfileScreen() {
               placeholderTextColor="rgba(255,255,255,0.3)"
             />
 
-            <Text style={s.label}>OCCUPATION</Text>
-            <TextInput
-              style={s.input}
-              value={occupation}
-              onChangeText={setOccupation}
-              placeholder="Your job or role"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-            />
           </View>
 
           {/* Daily Routine */}
@@ -337,6 +361,32 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
+
+          {/* Coming Up */}
+          {upcomingDates.length > 0 && (
+            <View style={s.card}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                <Ionicons name="calendar-outline" size={18} color="#a78bfa" />
+                <Text style={s.sectionTitle}>Coming Up</Text>
+              </View>
+              {upcomingDates.map((item, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: i < upcomingDates.length - 1 ? 1 : 0, borderBottomColor: "rgba(255,255,255,0.06)" }}>
+                  <View style={{ width: 46, height: 46, borderRadius: 12, backgroundColor: "rgba(167,139,250,0.12)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(167,139,250,0.25)" }}>
+                    <Text style={{ color: "#a78bfa", fontSize: 15, fontWeight: "800" }}>
+                      {item.daysAway === 0 ? "🎉" : String(item.daysAway)}
+                    </Text>
+                    {item.daysAway > 0 && <Text style={{ color: "rgba(167,139,250,0.6)", fontSize: 9, fontWeight: "600" }}>days</Text>}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#f0f0f6", fontSize: 15, fontWeight: "700" }}>{item.name}'s {item.type}</Text>
+                    <Text style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 2 }}>
+                      {item.date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
 
           {/* Save */}
           <TouchableOpacity style={s.saveBtn} onPress={save}>

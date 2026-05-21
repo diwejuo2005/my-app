@@ -1,12 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Audio } from 'expo-av';
+import { Audio, Video, ResizeMode } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -211,22 +212,26 @@ async function fetchMemberNews(member: Member): Promise<NewsArticle[]> {
     return existing;
   };
 
+  const cityQ = member.city ? encodeURIComponent('"' + member.city + '"') : null;
   let articles: NewsArticle[] = [];
 
-  // 1. Country-specific tag
+  // 1. City-specific search (strictest — articles must mention the city)
+  if (cityQ) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?q=${cityQ}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`));
+
+  // 2. Country tag filtered by city keyword
   const tag = COUNTRY_TAG[member.country];
-  if (tag) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`));
+  if (articles.length < 5 && tag && cityQ) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&q=${cityQ}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
 
-  // 2. City search
-  if (articles.length < 5 && member.city) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?q=${encodeURIComponent('"' + member.city + '"')}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
+  // 3. Country tag alone (broader country news as fallback)
+  if (articles.length < 5 && tag) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
 
-  // 3. Region fallback
+  // 4. Region fallback
   if (articles.length < 5) {
     const region = REGION_TAGS[member.country];
     if (region) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${region}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
   }
 
-  // 4. World news as last resort
+  // 5. World news as last resort
   if (articles.length < 5) merge(articles, await guardianFetch('https://content.guardianapis.com/world?api-key=test&show-fields=trailText&page-size=10&order-by=newest'));
 
   return sort(articles).slice(0, 20);
@@ -352,6 +357,7 @@ function ChatTab({ member }: { member: Member }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const [zoomVideo, setZoomVideo] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -393,7 +399,11 @@ function ChatTab({ member }: { member: Member }) {
   async function startRecording() {
     try {
       await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
       const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
       setRecording(rec);
       setIsRecording(true);
@@ -417,10 +427,9 @@ function ChatTab({ member }: { member: Member }) {
 
   function longPressMessage(item: Message) {
     if (!item.sent) return;
-    const opts: any[] = [
-      { text: 'Delete', style: 'destructive', onPress: () => saveMessages(messages.filter(m => m.id !== item.id)) },
-    ];
-    if (item.text) opts.unshift({ text: 'Edit', onPress: () => { setEditingId(item.id); setEditText(item.text); } });
+    const opts: any[] = [];
+    if (item.text) opts.push({ text: 'Edit', onPress: () => { setEditingId(item.id); setEditText(item.text); setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150); } });
+    opts.push({ text: 'Delete', style: 'destructive', onPress: () => saveMessages(messages.filter(m => m.id !== item.id)) });
     opts.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert('Message', undefined, opts);
   }
@@ -434,7 +443,12 @@ function ChatTab({ member }: { member: Member }) {
 
   async function playAudio(uri: string) {
     try {
-      const { sound } = await Audio.Sound.createAsync({ uri });
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+      const { sound } = await Audio.Sound.createAsync({ uri }, { volume: 1.0 });
       await sound.playAsync();
     } catch { Alert.alert('Could not play audio'); }
   }
@@ -454,10 +468,10 @@ function ChatTab({ member }: { member: Member }) {
           </TouchableOpacity>
         ) : null}
         {item.videoUri ? (
-          <View style={{ width: 200, height: 140, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.8)" />
-            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 4 }}>Video</Text>
-          </View>
+          <TouchableOpacity onPress={() => setZoomVideo(item.videoUri!)} style={{ width: 200, height: 140, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.85)" />
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 4 }}>Tap to play</Text>
+          </TouchableOpacity>
         ) : null}
         {item.audioUri ? (
           <TouchableOpacity onPress={() => playAudio(item.audioUri!)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
@@ -480,7 +494,7 @@ function ChatTab({ member }: { member: Member }) {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={120}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
       <FlatList ref={listRef} data={messages} keyExtractor={(item) => item.id} renderItem={renderMessage}
         contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 16 }} showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
@@ -506,7 +520,89 @@ function ChatTab({ member }: { member: Member }) {
           {zoomImage ? <Image source={{ uri: zoomImage }} style={{ width: '90%', height: '70%', borderRadius: 16 }} resizeMode="contain" /> : null}
         </TouchableOpacity>
       </Modal>
+
+      <Modal visible={!!zoomVideo} transparent animationType="fade" onRequestClose={() => setZoomVideo(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>
+          {zoomVideo ? (
+            <Video
+              source={{ uri: zoomVideo }}
+              style={{ width: '100%', aspectRatio: 16 / 9 }}
+              resizeMode={ResizeMode.CONTAIN}
+              useNativeControls
+              shouldPlay
+            />
+          ) : null}
+          <TouchableOpacity onPress={() => setZoomVideo(null)} style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="close" size={22} color="white" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
+  );
+}
+
+// ─── PULSE LINE GRAPH (read-only view for connections) ───────────────────────
+
+function ConnectionLineGraph({ scores }: { scores: Record<string, number> }) {
+  const days = currentWeekDays();
+  const today = todayStr();
+  const W = Dimensions.get('window').width - 96;
+  const LEFT = 26;
+  const RIGHT = 8;
+  const TOP = 10;
+  const BOT = 22;
+  const GRAPH_H = 90;
+  const plotW = W - LEFT - RIGHT;
+  const plotH = GRAPH_H - TOP - BOT;
+
+  const xOf = (i: number) => LEFT + (i / 6) * plotW;
+  const yOf = (score: number) => TOP + ((5 - score) / 4) * plotH;
+
+  const pts = days.map((day, i) => ({
+    day,
+    x: xOf(i),
+    y: scores[day] != null ? yOf(scores[day]) : null,
+    score: scores[day],
+    label: DAY_LABELS[i],
+    isToday: day === today,
+  }));
+
+  return (
+    <View style={{ height: GRAPH_H + 20, position: 'relative' }}>
+      {[5, 4, 3, 2, 1].map((s) => (
+        <View key={s}>
+          <View style={{ position: 'absolute', left: LEFT, top: yOf(s), right: RIGHT, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+          <Text style={{ position: 'absolute', left: 0, top: yOf(s) - 5, width: LEFT - 2, textAlign: 'right', color: 'rgba(255,255,255,0.28)', fontSize: 8, fontWeight: '600' }}>
+            {s}
+          </Text>
+        </View>
+      ))}
+
+      {pts.map((p, i) => {
+        if (i === 0 || p.y === null || pts[i - 1].y === null) return null;
+        const prev = pts[i - 1];
+        const dx = p.x - prev.x;
+        const dy = p.y - prev.y!;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        return (
+          <View key={p.day + '-line'} style={{ position: 'absolute', left: (prev.x + p.x) / 2 - len / 2, top: (prev.y! + p.y) / 2 - 1, width: len, height: 2, backgroundColor: '#a78bfa', borderRadius: 1, transform: [{ rotate: `${angle}deg` }] }} />
+        );
+      })}
+
+      {pts.map((p) => (
+        <View key={p.day}>
+          {p.y != null ? (
+            <View style={{ position: 'absolute', left: p.x - 5, top: p.y - 5, width: 10, height: 10, borderRadius: 5, backgroundColor: barColor(p.score), borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)' }} />
+          ) : (
+            <View style={{ position: 'absolute', left: p.x - 4, top: yOf(3) - 4, width: 8, height: 8, borderRadius: 4, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'transparent' }} />
+          )}
+          <Text style={{ position: 'absolute', left: p.x - 14, top: GRAPH_H - 4, width: 28, textAlign: 'center', color: p.isToday ? '#a78bfa' : 'rgba(255,255,255,0.35)', fontSize: 9, fontWeight: p.isToday ? '700' : '500' }}>
+            {p.label}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -517,123 +613,50 @@ function PulseTab({ member }: { member: Member }) {
   const notesKey = `ensemble_pulse_notes_${member.id}`;
   const [pulseMap, setPulseMap] = useState<Record<string, Record<string, number>>>({});
   const [notes, setNotes] = useState('');
-  const today = todayStr();
   const days = currentWeekDays();
-
   const memberScores: Record<string, number> = pulseMap[String(member.id)] || {};
-  const todayScore = memberScores[today];
 
   useEffect(() => {
     AsyncStorage.multiGet([pulseKey, notesKey]).then(([[, pulse], [, noteRaw]]) => {
-      if (pulse) {
-        try { setPulseMap(JSON.parse(pulse)); } catch {}
-      }
+      if (pulse) { try { setPulseMap(JSON.parse(pulse)); } catch {} }
       if (noteRaw) setNotes(noteRaw);
     });
   }, [member.id]);
 
-  async function logScore(score: number) {
-    const memberKey = String(member.id);
-    const updated = {
-      ...pulseMap,
-      [memberKey]: { ...(pulseMap[memberKey] || {}), [today]: score },
-    };
-    setPulseMap(updated);
-    await AsyncStorage.setItem(pulseKey, JSON.stringify(updated));
-  }
-
-  async function saveNotes() {
-    await AsyncStorage.setItem(notesKey, notes);
-  }
-
-  const logged = days.filter((d) => memberScores[d] !== undefined);
+  const logged = days.filter((day) => memberScores[day] !== undefined);
   const avg =
     logged.length > 0
-      ? (logged.reduce((sum, d) => sum + memberScores[d], 0) / logged.length).toFixed(1)
+      ? (logged.reduce((sum, day) => sum + memberScores[day], 0) / logged.length).toFixed(1)
       : null;
-
-  const MAX_BAR_H = 80;
 
   return (
     <ScrollView
       contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 100 }}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={d.pulseHeader}>Notes from {member.name}</Text>
+      <Text style={d.pulseHeader}>{member.name}'s week</Text>
 
-      {/* Bar graph */}
       <View style={d.card}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 4 }}>
-          {days.map((day, idx) => {
-            const score = memberScores[day];
-            const barH = score ? (score / 5) * MAX_BAR_H : 4;
-            const isToday = day === today;
-            const color = barColor(score);
-            return (
-              <View key={day} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
-                <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '700', height: 14 }}>
-                  {score ? String(score) : ''}
-                </Text>
-                <View style={{ height: MAX_BAR_H, justifyContent: 'flex-end' }}>
-                  <View
-                    style={{
-                      width: '70%',
-                      minHeight: 4,
-                      height: barH,
-                      backgroundColor: color,
-                      borderRadius: 6,
-                      borderWidth: isToday ? 2 : 0,
-                      borderColor: '#a78bfa',
-                    }}
-                  />
-                </View>
-                <Text style={{ color: isToday ? '#a78bfa' : 'rgba(255,255,255,0.35)', fontSize: 10, fontWeight: isToday ? '700' : '500', marginTop: 2 }}>
-                  {DAY_LABELS[idx]}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-        <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+        <ConnectionLineGraph scores={memberScores} />
+        <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           <View style={d.chip}>
-            <Text style={d.chipText}>Average: {avg !== null ? avg : '—'}</Text>
+            <Text style={d.chipText}>Weekly avg: {avg ?? '—'}</Text>
+          </View>
+          <View style={d.chip}>
+            <Text style={d.chipText}>Days logged: {logged.length} / 7</Text>
           </View>
         </View>
       </View>
 
-      {/* Log score */}
       <View style={d.card}>
-        <Text style={d.sectionLabel}>Log today's check for {member.name}</Text>
-        <View style={{ flexDirection: 'row', gap: 6 }}>
-          {([1, 2, 3, 4, 5] as const).map((n) => {
-            const active = todayScore === n;
-            return (
-              <TouchableOpacity
-                key={n}
-                style={[d.scoreBtn, active && d.scoreBtnActive]}
-                onPress={() => logScore(n)}
-                activeOpacity={0.7}
-              >
-                <Text style={[d.scoreNum, active && d.scoreNumActive]}>{n}</Text>
-                <Text style={[d.scoreDesc, active && d.scoreDescActive]}>{MOOD_LABELS[n]}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Notes */}
-      <View style={d.card}>
-        <Text style={d.sectionLabel}>Your notes about {member.name}</Text>
-        <TextInput
-          style={d.noteInput}
-          multiline
-          value={notes}
-          onChangeText={setNotes}
-          onBlur={saveNotes}
-          placeholder="Write notes here..."
-          placeholderTextColor="rgba(255,255,255,0.25)"
-        />
+        <Text style={d.sectionLabel}>Notes from {member.name}</Text>
+        {notes ? (
+          <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 14, lineHeight: 20 }}>{notes}</Text>
+        ) : (
+          <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 14, fontStyle: 'italic' }}>
+            No notes left this week
+          </Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -656,7 +679,6 @@ function EditModal({
   const [relationship, setRelationship] = useState(member.relationship);
   const [photoUri, setPhotoUri] = useState<string | undefined>(member.photoUri);
   const [hometown, setHometown] = useState(member.hometown || '');
-  const [occupation, setOccupation] = useState(member.occupation || '');
   const [birthday, setBirthday] = useState(member.birthday || '');
   const [anniversary, setAnniversary] = useState(member.anniversary || '');
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
@@ -679,7 +701,6 @@ function EditModal({
     setRelationship(member.relationship);
     setPhotoUri(member.photoUri);
     setHometown(member.hometown || '');
-    setOccupation(member.occupation || '');
     setBirthday(member.birthday || '');
     setAnniversary(member.anniversary || '');
     setCityQuery(member.city || '');
@@ -729,7 +750,6 @@ function EditModal({
       relationship,
       photoUri,
       hometown,
-      occupation,
       birthday,
       anniversary,
       ...city,
@@ -796,16 +816,6 @@ function EditModal({
             value={hometown}
             onChangeText={setHometown}
             placeholder="City / Town they grew up in"
-            placeholderTextColor="rgba(255,255,255,0.3)"
-          />
-
-          {/* Occupation */}
-          <Text style={e.label}>OCCUPATION</Text>
-          <TextInput
-            style={e.input}
-            value={occupation}
-            onChangeText={setOccupation}
-            placeholder="Teacher, Engineer, Retired..."
             placeholderTextColor="rgba(255,255,255,0.3)"
           />
 

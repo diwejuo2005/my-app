@@ -33,21 +33,17 @@ type Cluster = { city: string; lat: number; lon: number; members: Member[] };
 
 function Pin({ cluster, onPress }: { cluster: Cluster; onPress: () => void }) {
   const isMulti = cluster.members.length > 1;
-  const color = isMulti ? "#7c6af7" : getAvatarColor(cluster.members[0].id);
-  const m = cluster.members[0];
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={s.pinContainer}>
-      <View style={[s.pinHead, { backgroundColor: color }]}>
+      <View style={s.pinHead}>
         {isMulti ? (
           <Text style={s.pinCount}>{cluster.members.length}</Text>
-        ) : m.photoUri ? (
-          <Image source={{ uri: m.photoUri }} style={s.pinPhoto} />
         ) : (
-          <Text style={s.pinInitial}>{m.name[0].toUpperCase()}</Text>
+          <Ionicons name="location" size={18} color="white" />
         )}
       </View>
-      <View style={[s.pinTail, { borderTopColor: color }]} />
+      <View style={s.pinTail} />
       <Text style={s.pinLabel} numberOfLines={1}>{cluster.city}</Text>
     </TouchableOpacity>
   );
@@ -184,16 +180,16 @@ function startGlobe() {
       .htmlTransitionDuration(0)
       .htmlElement(function(d) {
         var count = d.ids.length;
-        var member = MEMBERS.find(function(m) { return m.id === d.ids[0]; });
-        var label = count > 1 ? String(count) : (member ? member.name[0].toUpperCase() : '?');
-        var name = count > 1 ? d.city : (member ? member.name : d.city);
+        var pinInner = count > 1
+          ? '<span style="color:rgba(255,255,255,0.95);font-weight:800;font-size:13px;font-family:-apple-system,sans-serif;line-height:1">' + count + '</span>'
+          : '<svg viewBox="0 0 24 24" width="22" height="22" fill="white"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>';
         var wrap = document.createElement('div');
         wrap.style.cssText = 'position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px';
         wrap.innerHTML =
-          '<div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#2d1b8a,#7c6af7);border:2.5px solid rgba(167,139,250,0.85);display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(124,106,247,0.75),0 2px 8px rgba(0,0,0,0.6)">' +
-          '<span style="color:rgba(255,255,255,0.95);font-weight:800;font-size:' + (count > 1 ? '13' : '17') + 'px;font-family:-apple-system,sans-serif;line-height:1">' + label + '</span>' +
+          '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#2d1b8a,#7c6af7);border:2.5px solid rgba(167,139,250,0.85);display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(124,106,247,0.75),0 2px 8px rgba(0,0,0,0.6)">' +
+          pinInner +
           '</div>' +
-          '<div style="background:rgba(10,8,30,0.75);border-radius:6px;padding:2px 6px;white-space:nowrap;color:rgba(255,255,255,0.9);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;border:1px solid rgba(124,106,247,0.4)">' + name + '</div>';
+          '<div style="background:rgba(10,8,30,0.75);border-radius:6px;padding:2px 7px;white-space:nowrap;color:rgba(255,255,255,0.95);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;border:1px solid rgba(124,106,247,0.4)">' + d.city + '</div>';
         wrap.addEventListener('click', function(e) {
           e.stopPropagation();
           try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city:d.city, memberIds:d.ids})); } catch(ex) {}
@@ -370,23 +366,21 @@ const s = StyleSheet.create({
   },
   pinContainer: { alignItems: "center" },
   pinHead: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#7c6af7",
     borderWidth: 2.5,
-    borderColor: "rgba(255,255,255,0.85)",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOpacity: 0.5,
+    borderColor: "rgba(167,139,250,0.85)",
+    shadowColor: "#7c6af7",
+    shadowOpacity: 0.7,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 6,
   },
-  pinPhoto: { width: 30, height: 30, borderRadius: 15 },
   pinCount: { color: "white", fontWeight: "800", fontSize: 13 },
-  pinInitial: { color: "white", fontWeight: "700", fontSize: 14 },
   pinTail: {
     width: 0,
     height: 0,
@@ -395,6 +389,7 @@ const s = StyleSheet.create({
     borderTopWidth: 11,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
+    borderTopColor: "#7c6af7",
     marginTop: -1,
   },
   pinLabel: {
