@@ -443,22 +443,18 @@ export default function NewsScreen() {
     load().finally(() => setLoading(false));
     const t = setInterval(() => {
       load().catch(() => {});
-    }, 90000);
+    }, 60000);
     return () => clearInterval(t);
   }, [active, members.length]);
 
-  const borderColor = (level: string) =>
-    level === "critical"
-      ? "#ef4444"
-      : level === "important"
-        ? "#f59e0b"
-        : "rgba(255,255,255,0.12)";
+  const cardBorderColor = (level: string) =>
+    level === "critical" ? "#ef4444" :
+    level === "important" ? "#f59e0b" :
+    "rgba(34,197,94,0.45)";
   const titleColor = (level: string) =>
-    level === "critical"
-      ? "#fca5a5"
-      : level === "important"
-        ? "#fde68a"
-        : "rgba(255,255,255,0.9)";
+    level === "critical" ? "#fca5a5" :
+    level === "important" ? "#fde68a" :
+    "rgba(255,255,255,0.9)";
 
   return (
     <View style={s.root}>
@@ -513,7 +509,7 @@ export default function NewsScreen() {
         {news.map((article, i) => (
           <TouchableOpacity
             key={i}
-            style={[s.card, { borderLeftColor: borderColor(article.level) }]}
+            style={[s.card, { borderColor: cardBorderColor(article.level), borderWidth: article.level !== 'normal' ? 2 : 1 }]}
             onPress={() => Linking.openURL(article.link)}
           >
             <Text style={s.section}>{article.section}</Text>

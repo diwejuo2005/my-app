@@ -69,30 +69,34 @@ function weatherCodeInfo(code: number) {
   return { ionicon: "partly-sunny-outline", label: "Unknown", severe: false };
 }
 
+function safeTimezone(tz: string | undefined): string {
+  if (!tz) return "UTC";
+  try { Intl.DateTimeFormat(undefined, { timeZone: tz }); return tz; } catch { return "UTC"; }
+}
+
 function getTimeOfDay(timezone: string) {
-  const h = parseInt(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: timezone,
-      hour: "numeric",
-      hour12: false,
-    }).format(new Date()),
-  );
-  if (h >= 5 && h < 8) return "dawn";
-  if (h >= 8 && h < 12) return "morning";
-  if (h >= 12 && h < 17) return "afternoon";
-  if (h >= 17 && h < 20) return "evening";
-  if (h >= 20 && h < 22) return "late-evening";
-  return "night";
+  try {
+    const h = parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: safeTimezone(timezone),
+        hour: "2-digit",
+        hour12: false,
+      }).format(new Date()),
+    ) % 24;
+    if (h >= 5 && h < 8) return "dawn";
+    if (h >= 8 && h < 12) return "morning";
+    if (h >= 12 && h < 17) return "afternoon";
+    if (h >= 17 && h < 20) return "evening";
+    if (h >= 20 && h < 22) return "late-evening";
+    return "night";
+  } catch { return "night"; }
 }
 
 function getCallStatus(timezone: string, wakeHour: number, sleepHour: number) {
-  const str = new Date().toLocaleString("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const [h, m] = str.split(":").map(Number);
+  const tz = safeTimezone(timezone);
+  const now = new Date();
+  const h = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", hour12: false }).format(now)) % 24;
+  const m = parseInt(new Intl.DateTimeFormat("en-US", { timeZone: tz, minute: "2-digit" }).format(now));
   const t = h + m / 60;
   if (t >= wakeHour + 1 && t < sleepHour - 1)
     return { label: "Good time to call", dot: "#22c55e" };
@@ -173,14 +177,15 @@ function FamilyCard({ member, tick, onView }: { member: Member; tick: number; on
     member.wakeHour,
     member.sleepHour,
   );
+  const tz = safeTimezone(member.timezone);
   const timeStr = new Intl.DateTimeFormat("en-US", {
-    timeZone: member.timezone,
+    timeZone: tz,
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   }).format(new Date());
   const dateStr = new Intl.DateTimeFormat("en-US", {
-    timeZone: member.timezone,
+    timeZone: tz,
     weekday: "long",
     month: "short",
     day: "numeric",

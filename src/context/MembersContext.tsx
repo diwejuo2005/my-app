@@ -84,7 +84,14 @@ export function MembersProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     AsyncStorage.getItem("ensemble_members").then((d) => {
-      if (d) setMembers(JSON.parse(d));
+      if (!d) return;
+      const parsed: Member[] = JSON.parse(d);
+      // Merge with defaults so any new fields added to DEFAULTS get backfilled
+      const filled = parsed.map((stored) => {
+        const def = DEFAULTS.find((x) => x.id === stored.id);
+        return { ...def, ...stored, timezone: stored.timezone || def?.timezone || "UTC" };
+      });
+      setMembers(filled);
     });
   }, []);
 

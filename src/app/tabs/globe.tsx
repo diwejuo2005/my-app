@@ -160,10 +160,12 @@ function startGlobe() {
       .width(window.innerWidth)
       .height(window.innerHeight)
       .backgroundColor('#07080f')
-      .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2/example/img/earth-dark.jpg')
+      .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2/example/img/earth-day.jpg')
       .showAtmosphere(true)
-      .atmosphereColor('#6b4fb8')
-      .atmosphereAltitude(0.18);
+      .atmosphereColor('#4a6fa0')
+      .atmosphereAltitude(0.20);
+
+    myGlobe.renderer().setPixelRatio(window.devicePixelRatio || 2);
 
     // Cluster by city
     var cityMap = {};
@@ -192,8 +194,9 @@ function startGlobe() {
           '</svg>' +
           (count > 1 ? '<div style="position:absolute;top:-5px;right:-10px;background:#a78bfa;border-radius:8px;padding:0 5px;height:16px;font-size:9px;font-weight:800;color:white;text-align:center;line-height:16px;border:1.5px solid white;font-family:sans-serif">' + count + '</div>' : '') +
           '<div style="position:absolute;top:34px;left:50%;transform:translateX(-50%);white-space:nowrap;color:rgba(255,255,255,0.95);font-size:9px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,1);font-family:sans-serif;pointer-events:none">' + d.city + '</div>';
-        wrap.addEventListener('click', function() {
-          try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city:d.city, memberIds:d.ids})); } catch(e) {}
+        wrap.addEventListener('click', function(e) {
+          e.stopPropagation();
+          try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city:d.city, memberIds:d.ids})); } catch(ex) {}
         });
         return wrap;
       });
