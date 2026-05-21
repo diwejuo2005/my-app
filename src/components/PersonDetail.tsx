@@ -956,17 +956,15 @@ function ScheduleTab() {
   useEffect(() => {
     Promise.all([
       AsyncStorage.getItem('ensemble_calendar'),
-      AsyncStorage.getItem('ensemble_google_events'),
       AsyncStorage.getItem('ensemble_calendar_visibility'),
-    ]).then(([localRaw, googleRaw, visRaw]) => {
+    ]).then(([localRaw, visRaw]) => {
       const today = new Date().toISOString().split('T')[0];
       const cutoff = new Date();
       cutoff.setDate(cutoff.getDate() + 30);
       const cutoffStr = cutoff.toISOString().split('T')[0];
 
       const localEvs: CalEvent[] = localRaw ? JSON.parse(localRaw) : [];
-      const googleEvs: CalEvent[] = googleRaw ? JSON.parse(googleRaw) : [];
-      const all = [...localEvs, ...googleEvs];
+      const all = [...localEvs];
       const upcoming = all
         .filter((e) => e.date >= today && e.date <= cutoffStr)
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
