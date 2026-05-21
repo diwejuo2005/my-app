@@ -83,14 +83,36 @@ export function MembersProvider({ children }: { children: React.ReactNode }) {
   const [members, setMembers] = useState<Member[]>(DEFAULTS);
 
   useEffect(() => {
-    AsyncStorage.getItem("ensemble_members").then((d) => {
+    AsyncStorage.getItem("ensemble_members").then(async (d) => {
       if (!d) return;
       const parsed: Member[] = JSON.parse(d);
-      // Merge with defaults so any new fields added to DEFAULTS get backfilled
-      const filled = parsed.map((stored) => {
+      let filled = parsed.map((stored) => {
         const def = DEFAULTS.find((x) => x.id === stored.id);
         return { ...def, ...stored, timezone: stored.timezone || def?.timezone || "UTC" };
       });
+
+      // Auto-correct members whose timezone is "GMT" — this was incorrectly stored
+      // by a bug in the city search fallback that used the weather API without timezone=auto.
+      const needsFix = filled.some((m) => m.timezone === "GMT");
+      if (needsFix) {
+        filled = await Promise.all(
+          filled.map(async (m) => {
+            if (m.timezone !== "GMT") return m;
+            try {
+              const res = await fetch(
+                `https://api.open-meteo.com/v1/forecast?latitude=${m.lat}&longitude=${m.lon}&current=temperature_2m&timezone=auto`,
+              );
+              const data = await res.json();
+              if (data?.timezone && data.timezone !== "GMT") {
+                return { ...m, timezone: data.timezone };
+              }
+            } catch {}
+            return m;
+          }),
+        );
+        AsyncStorage.setItem("ensemble_members", JSON.stringify(filled));
+      }
+
       setMembers(filled);
     });
   }, []);

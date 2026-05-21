@@ -90,10 +90,10 @@ async function searchCities(query: string): Promise<CityResult[]> {
         let timezone = "UTC";
         try {
           const tzRes = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m`,
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m&timezone=auto`,
           );
           const tzData = await tzRes.json();
-          if (tzData && typeof tzData.timezone === "string") {
+          if (tzData && typeof tzData.timezone === "string" && tzData.timezone !== "GMT") {
             timezone = tzData.timezone;
           }
         } catch {}

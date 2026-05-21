@@ -223,25 +223,7 @@ function startGlobe() {
       }
     }, false);
 
-    // Send pin screen-coordinates to React Native so it can render native tap targets
-    var posTimer = null;
-    function sendPinPositions() {
-      var pins = clusters.map(function(d) {
-        try {
-          var sc = myGlobe.getScreenCoords(d.lat, d.lng, 0.01);
-          var vis = sc && sc.x > -60 && sc.x < window.innerWidth + 60 && sc.y > -60 && sc.y < window.innerHeight + 60;
-          return { city: d.city, ids: d.ids, x: vis ? Math.round(sc.x) : -1, y: vis ? Math.round(sc.y) : -1 };
-        } catch(e) { return { city: d.city, ids: d.ids, x: -1, y: -1 }; }
-      });
-      try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-positions', pins: pins})); } catch(e) {}
-    }
-    function schedulePins() {
-      if (posTimer) clearTimeout(posTimer);
-      posTimer = setTimeout(sendPinPositions, 80);
-    }
     var ctrl = myGlobe.controls();
-    ctrl.addEventListener('change', schedulePins);
-    setTimeout(sendPinPositions, 900);
     ctrl.autoRotate = true;
     ctrl.autoRotateSpeed = 0.5;
     ctrl.enableZoom = true;
@@ -283,8 +265,6 @@ tryLoad(
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
-type PinPosition = { city: string; ids: number[]; x: number; y: number };
-
 export default function GlobeScreen() {
   const { members } = useMembers();
   const [useFlatMap, setUseFlatMap] = useState(false);
@@ -292,7 +272,6 @@ export default function GlobeScreen() {
     city: string;
     memberIds: number[];
   } | null>(null);
-  const [pinPositions, setPinPositions] = useState<PinPosition[]>([]);
 
   const cityMembers = selectedCity
     ? members.filter((m) => selectedCity.memberIds.includes(m.id))
@@ -319,8 +298,6 @@ export default function GlobeScreen() {
         setUseFlatMap(true);
       } else if (msg.type === "pin-click") {
         setSelectedCity({ city: msg.city, memberIds: msg.memberIds });
-      } else if (msg.type === "pin-positions") {
-        setPinPositions(msg.pins || []);
       }
     } catch {}
   }
@@ -335,36 +312,18 @@ export default function GlobeScreen() {
           onCityPress={(city, memberIds) => setSelectedCity({ city, memberIds })}
         />
       ) : (
-        <View style={{ flex: 1 }}>
-          <WebView
-            source={{ html }}
-            style={{ flex: 1, backgroundColor: "#07080f" }}
-            onMessage={handleMessage}
-            javaScriptEnabled
-            originWhitelist={["*"]}
-            mixedContentMode="always"
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            onError={() => setUseFlatMap(true)}
-            onHttpError={() => setUseFlatMap(true)}
-          />
-          {pinPositions.filter(p => p.x >= 0 && p.y >= 0).map(p => (
-            <TouchableOpacity
-              key={p.city}
-              style={{
-                position: "absolute",
-                left: p.x - 50,
-                top: p.y - 50,
-                width: 100,
-                height: 100,
-                backgroundColor: "rgba(0,0,0,0.001)",
-              }}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-              onPress={() => setSelectedCity({ city: p.city, memberIds: p.ids })}
-              activeOpacity={1}
-            />
-          ))}
-        </View>
+        <WebView
+          source={{ html }}
+          style={{ flex: 1, backgroundColor: "#07080f" }}
+          onMessage={handleMessage}
+          javaScriptEnabled
+          originWhitelist={["*"]}
+          mixedContentMode="always"
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          onError={() => setUseFlatMap(true)}
+          onHttpError={() => setUseFlatMap(true)}
+        />
       )}
 
       <Modal
