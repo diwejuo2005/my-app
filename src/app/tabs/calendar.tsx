@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Google from "expo-auth-session/providers/google";
+import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -1506,12 +1506,6 @@ export default function CalendarScreen() {
   const [showVisibility, setShowVisibility] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
 
-  // Google OAuth hook — requires a valid webClientId to be set above
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: GOOGLE_CLIENT_ID,
-    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
-  });
-
   const today = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => toDateString(today), [today]);
 
@@ -1535,22 +1529,6 @@ export default function CalendarScreen() {
       if (gEvRaw) setGoogleEvents(JSON.parse(gEvRaw));
     });
   }, []);
-
-  // Handle OAuth response
-  useEffect(() => {
-    if (!response) return;
-    if (response.type === "success" && response.authentication?.accessToken) {
-      const token = response.authentication.accessToken;
-      setGoogleToken(token);
-      AsyncStorage.setItem(GOOGLE_TOKEN_KEY, JSON.stringify(token));
-      fetchGoogleEvents(token);
-    } else if (response.type === "error") {
-      Alert.alert(
-        "Sign-in failed",
-        response.error?.message ?? "Could not sign in with Google."
-      );
-    }
-  }, [response]);
 
   async function fetchGoogleEvents(accessToken: string) {
     setSyncLoading(true);
@@ -1625,7 +1603,7 @@ export default function CalendarScreen() {
     }
   }
 
-  function handleConnect() {
+  async function handleConnect() {
     if (GOOGLE_CLIENT_ID.startsWith("YOUR_")) {
       Alert.alert(
         "Setup required",
@@ -1633,7 +1611,39 @@ export default function CalendarScreen() {
       );
       return;
     }
-    promptAsync();
+    setSyncLoading(true);
+    try {
+      const redirectUri = AuthSession.makeRedirectUri({ scheme: "ensemble" });
+      const scope = encodeURIComponent(
+        "https://www.googleapis.com/auth/calendar.readonly"
+      );
+      const authUrl =
+        `https://accounts.google.com/o/oauth2/v2/auth` +
+        `?client_id=${GOOGLE_CLIENT_ID}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&response_type=token` +
+        `&scope=${scope}`;
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      if (result.type === "success") {
+        const fragment = result.url.split("#")[1] ?? "";
+        const params = new URLSearchParams(fragment);
+        const token = params.get("access_token");
+        if (token) {
+          setGoogleToken(token);
+          AsyncStorage.setItem(GOOGLE_TOKEN_KEY, JSON.stringify(token));
+          fetchGoogleEvents(token);
+          return;
+        }
+      }
+      if (result.type !== "cancel" && result.type !== "dismiss") {
+        Alert.alert("Sign-in failed", "Could not complete Google sign-in.");
+      }
+    } catch (err) {
+      Alert.alert("Sign-in failed", "An error occurred during sign-in.");
+    } finally {
+      setSyncLoading(false);
+    }
   }
 
   function handleDisconnect() {
@@ -1736,7 +1746,7 @@ export default function CalendarScreen() {
         onRefresh={() => googleToken && fetchGoogleEvents(googleToken)}
         visibility={visibility}
         onVisibilityPress={() => setShowVisibility(true)}
-        canConnect={!!request}
+        canConnect={true}
       />
 
       <TimeGrid
