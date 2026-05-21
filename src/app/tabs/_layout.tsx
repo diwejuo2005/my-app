@@ -2,8 +2,11 @@ import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts, DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
 import { Tabs, useRouter } from "expo-router";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   SafeAreaView,
   ScrollView,
   Text,
@@ -41,6 +44,7 @@ function ScrollableTabBar({ state, descriptors, navigation }: BottomTabBarProps)
       >
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
+          if ((options as any).href === null) return null;  // ← ADD THIS LINE
           const isFocused = state.index === index;
           const label = (options.title ?? route.name) as string;
           const color = isFocused ? "#a78bfa" : "rgba(255,255,255,0.3)";
@@ -91,6 +95,13 @@ function ScrollableTabBar({ state, descriptors, navigation }: BottomTabBarProps)
 export default function TabLayout() {
   const router = useRouter();
   const [fontsLoaded] = useFonts({ DancingScript_700Bold });
+  const [userProfile, setUserProfile] = useState<{ name: string; photoUri?: string } | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem("ensemble_user_profile").then((raw) => {
+      if (raw) setUserProfile(JSON.parse(raw));
+    });
+  }, []);
 
   return (
     <Tabs
@@ -137,12 +148,23 @@ export default function TabLayout() {
                 >
                   {title}
                 </Text>
-                <TouchableOpacity
-                  onPress={() => router.push("/settings")}
-                  style={{ position: "absolute", right: 16, top: 8, padding: 6 }}
-                >
-                  <Ionicons name="settings-outline" size={22} color="#a78bfa" />
-                </TouchableOpacity>
+                <View style={{ position: "absolute", right: 12, top: 8, flexDirection: "row", alignItems: "center", gap: 2 }}>
+                  <TouchableOpacity onPress={() => router.push("/profile")} style={{ padding: 4 }}>
+                    {userProfile?.photoUri ? (
+                      <Image source={{ uri: userProfile.photoUri }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                    ) : (
+                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#2d3a5a", alignItems: "center", justifyContent: "center" }}>
+                        <Ionicons name="person" size={14} color="rgba(255,255,255,0.7)" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => router.push("/settings")}
+                    style={{ padding: 6 }}
+                  >
+                    <Ionicons name="settings-outline" size={22} color="#a78bfa" />
+                  </TouchableOpacity>
+                </View>
               </View>
             </SafeAreaView>
           );
