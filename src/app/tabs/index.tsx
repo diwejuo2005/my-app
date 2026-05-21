@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -292,18 +291,11 @@ export default function HomeScreen() {
   const { members, updateMember, removeMember } = useMembers();
   const router = useRouter();
   const [tick, setTick] = useState(0);
-  const [userProfile, setUserProfile] = useState<{ name: string; photoUri?: string } | null>(null);
   const [viewingMember, setViewingMember] = useState<Member | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    AsyncStorage.getItem("ensemble_user_profile").then((raw) => {
-      if (raw) setUserProfile(JSON.parse(raw));
-    });
   }, []);
 
   useEffect(() => {
@@ -331,45 +323,6 @@ export default function HomeScreen() {
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <TouchableOpacity
-            style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 }}
-            onPress={() => router.push("/profile")}
-          >
-            {userProfile?.photoUri ? (
-              <Image
-                source={{ uri: userProfile.photoUri }}
-                style={{ width: 40, height: 40, borderRadius: 20 }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  backgroundColor: "#2d3a5a",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Ionicons name="person" size={20} color="rgba(255,255,255,0.6)" />
-              </View>
-            )}
-            <View>
-              <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, fontWeight: "600" }}>
-                WELCOME BACK
-              </Text>
-              <Text style={{ color: "#f0f0f6", fontSize: 16, fontWeight: "700" }}>
-                {userProfile?.name || "Set up your profile"}
-              </Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color="rgba(255,255,255,0.3)"
-              style={{ marginLeft: "auto" }}
-            />
-          </TouchableOpacity>
-
           <View style={s.statRow}>
             <View style={s.statCard}>
               <Text style={s.statNum}>{members.length}</Text>
@@ -390,6 +343,28 @@ export default function HomeScreen() {
           <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          bottom: 98,
+          right: 20,
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: '#7c6af7',
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#7c6af7',
+          shadowOpacity: 0.45,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: 10,
+        }}
+        onPress={() => router.push('/tabs/people')}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={30} color="white" />
+      </TouchableOpacity>
       {viewingMember && (
         <PersonDetail
           member={viewingMember}

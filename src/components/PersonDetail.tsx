@@ -55,6 +55,16 @@ type CityResult = {
   admin1?: string;
 };
 
+type CalEvent = {
+  id: string;
+  title: string;
+  date: string;      // "YYYY-MM-DD"
+  startTime: string; // "HH:MM" 24h
+  endTime: string;   // "HH:MM" 24h
+  color: string;
+  notes?: string;
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = ['#2d3a5a', '#2d4a3e', '#3a2d4a', '#4a3a2d', '#2d4a4a'];
@@ -803,10 +813,116 @@ function EditModal({
   );
 }
 
+// ─── SCHEDULE TAB ────────────────────────────────────────────────────────────
+
+function ScheduleTab() {
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    AsyncStorage.getItem('ensemble_calendar').then((raw) => {
+      if (raw) {
+        const all: CalEvent[] = JSON.parse(raw);
+        const today = new Date().toISOString().split('T')[0];
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() + 30);
+        const cutoffStr = cutoff.toISOString().split('T')[0];
+        const upcoming = all
+          .filter((e) => e.date >= today && e.date <= cutoffStr)
+          .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+        setEvents(upcoming);
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  if (loading) {
+    return <ActivityIndicator color="#a78bfa" style={{ marginTop: 40 }} />;
+  }
+
+  if (events.length === 0) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 }}>
+        <Ionicons name="calendar-outline" size={48} color="rgba(255,255,255,0.15)" />
+        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 15, textAlign: 'center' }}>
+          No upcoming events in the next 30 days.
+        </Text>
+      </View>
+    );
+  }
+
+  const grouped: Record<string, CalEvent[]> = {};
+  events.forEach((e) => {
+    if (!grouped[e.date]) grouped[e.date] = [];
+    grouped[e.date].push(e);
+  });
+  const dates = Object.keys(grouped).sort();
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 40 }}
+      showsVerticalScrollIndicator={false}
+    >
+      {dates.map((date) => {
+        const d = new Date(date + 'T12:00:00');
+        const label = d.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+        });
+        return (
+          <View key={date}>
+            <Text
+              style={{
+                color: 'rgba(255,255,255,0.5)',
+                fontSize: 11,
+                fontWeight: '700',
+                letterSpacing: 0.8,
+                marginBottom: 8,
+              }}
+            >
+              {label.toUpperCase()}
+            </Text>
+            {grouped[date].map((ev) => (
+              <View
+                key={ev.id}
+                style={{
+                  flexDirection: 'row',
+                  gap: 12,
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                  borderRadius: 14,
+                  padding: 14,
+                  marginBottom: 8,
+                  borderLeftWidth: 3,
+                  borderLeftColor: ev.color,
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: '#f0f0f6', fontSize: 15, fontWeight: '700' }}>
+                    {ev.title}
+                  </Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 3 }}>
+                    {ev.startTime} – {ev.endTime}
+                  </Text>
+                  {ev.notes ? (
+                    <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 4 }}>
+                      {ev.notes}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function PersonDetail({ member, visible, onClose, onUpdate, onDelete }: Props) {
-  const [activeTab, setActiveTab] = useState<'News' | 'Chat' | 'Pulse'>('News');
+  const [activeTab, setActiveTab] = useState<'News' | 'Chat' | 'Pulse' | 'Schedule'>('News');
   const [editVisible, setEditVisible] = useState(false);
 
   function confirmDelete() {
@@ -832,7 +948,7 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
     onUpdate(updated);
   }
 
-  const tabs: Array<'News' | 'Chat' | 'Pulse'> = ['News', 'Chat', 'Pulse'];
+  const tabs: Array<'News' | 'Chat' | 'Pulse' | 'Schedule'> = ['News', 'Chat', 'Pulse', 'Schedule'];
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
@@ -879,6 +995,7 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
           {activeTab === 'News' && <NewsTab member={member} />}
           {activeTab === 'Chat' && <ChatTab member={member} />}
           {activeTab === 'Pulse' && <PulseTab member={member} />}
+          {activeTab === 'Schedule' && <ScheduleTab />}
         </View>
 
         {/* Edit modal */}

@@ -45,7 +45,7 @@ export default function GlobeScreen() {
 <div id="g"></div>
 <script src="https://unpkg.com/globe.gl@2"></script>
 <script>
-  const members = ${JSON.stringify(members)};
+  const members = ${JSON.stringify(members.map(function(m) { return { id: m.id, name: m.name, lat: m.lat, lon: m.lon, city: m.city }; }))};
   const colors = ['#2d3a5a','#2d4a3e','#3a2d4a','#4a3a2d','#2d4a4a'];
 
   // Group by city
@@ -141,6 +141,8 @@ export default function GlobeScreen() {
         javaScriptEnabled
         originWhitelist={["*"]}
         allowUniversalAccessFromFileURLs
+        mixedContentMode="always"
+        allowFileAccessFromFileURLs
         onMessage={(e) => {
           try {
             const d = JSON.parse(e.nativeEvent.data);
