@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Calendar from "expo-calendar";
+import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -166,34 +167,55 @@ function mapDeviceEvent(
   ev: Calendar.Event,
   calColor: string
 ): CalendarEvent | null {
-  try {
-    const start = new Date(ev.startDate as string);
-    const end = new Date((ev.endDate ?? ev.startDate) as string);
+  // All-day events have a date-only startDate string ("2026-05-18") which
+  // parses as midnight UTC — this shifts the day in local time. Skip them;
+  // they need a separate header row which we'll add later.
+  if (ev.allDay) return null;
 
-    const clamped = clampTime(start.getHours(), start.getMinutes());
-    const clampedEnd = clampTime(end.getHours(), end.getMinutes());
+  // expo-calendar returns ISO 8601 strings on iOS/Android, but guard both cases.
+  const start = ev.startDate instanceof Date
+    ? ev.startDate
+    : new Date(ev.startDate as string);
+  const endRaw = ev.endDate ?? ev.startDate;
+  const end = endRaw instanceof Date
+    ? endRaw
+    : new Date(endRaw as string);
 
-    const startTime = `${String(clamped.h).padStart(2, "0")}:${String(clamped.m).padStart(2, "0")}`;
-    let endTime = `${String(clampedEnd.h).padStart(2, "0")}:${String(clampedEnd.m).padStart(2, "0")}`;
+  if (isNaN(start.getTime())) return null;
 
-    if (endTime <= startTime) {
-      const nextH = Math.min(GRID_END_HOUR, clamped.h + 1);
-      endTime = `${String(nextH).padStart(2, "0")}:${String(clamped.m).padStart(2, "0")}`;
-    }
+  const sh = start.getHours();
+  const sm = start.getMinutes();
 
-    return {
-      id: `device-${ev.id}`,
-      title: ev.title ?? "(no title)",
-      date: toDateString(start),
-      startTime,
-      endTime,
-      color: calColor || "#60a5fa",
-      notes: ev.notes ?? undefined,
-      source: "device",
-    };
-  } catch {
-    return null;
+  // Event starts after our grid — skip
+  if (sh > GRID_END_HOUR) return null;
+
+  // If the event ends on a different calendar day, cap it at grid end
+  const endsNextDay = toDateString(end) !== toDateString(start);
+  const eh = endsNextDay ? GRID_END_HOUR : end.getHours();
+  const em = endsNextDay ? 0 : end.getMinutes();
+
+  const sc = clampTime(sh, sm);
+  const ec = clampTime(eh, em);
+
+  const startTime = `${String(sc.h).padStart(2, "0")}:${String(sc.m).padStart(2, "0")}`;
+  let endTime = `${String(ec.h).padStart(2, "0")}:${String(ec.m).padStart(2, "0")}`;
+
+  // Guarantee at least a 30-minute visible block
+  if (endTime <= startTime) {
+    const nextH = Math.min(GRID_END_HOUR, sc.h + 1);
+    endTime = `${String(nextH).padStart(2, "0")}:${String(sc.m).padStart(2, "0")}`;
   }
+
+  return {
+    id: `device-${ev.id}`,
+    title: ev.title || "(no title)",
+    date: toDateString(start),
+    startTime,
+    endTime,
+    color: calColor || "#60a5fa",
+    notes: ev.notes ?? undefined,
+    source: "device",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1258,7 +1280,7 @@ export default function CalendarScreen() {
     return Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
   }, [today, weekOffset]);
 
-  // Load persisted local events + visibility on mount, then auto-sync if permission exists
+  // Load persisted local events + visibility on mount
   useEffect(() => {
     Promise.all([
       loadEvents(),
@@ -1267,12 +1289,18 @@ export default function CalendarScreen() {
     ]).then(([localEvs, visRaw, permRaw]) => {
       setEvents(localEvs);
       if (visRaw) setVisibility(visRaw as CalendarVisibility);
-      if (permRaw === "granted") {
-        setPermissionGranted(true);
-        loadDeviceEvents();
-      }
+      if (permRaw === "granted") setPermissionGranted(true);
     });
   }, []);
+
+  // Re-sync device calendar every time this tab comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      AsyncStorage.getItem("ensemble_cal_permission").then((perm) => {
+        if (perm === "granted") loadDeviceEvents();
+      });
+    }, [])
+  );
 
   async function loadDeviceEvents() {
     setSyncLoading(true);
