@@ -139,20 +139,24 @@ function WeekLineGraph({
       {/* Points + day labels */}
       {pts.map((p) => (
         <View key={p.day}>
-          <TouchableOpacity
-            style={{ position: "absolute", left: p.x - 16, top: (p.y ?? yOf(3)) - 16, width: 32, height: 32, alignItems: "center", justifyContent: "center" }}
-            onPress={() => onDayPress(p.day)}
-            activeOpacity={0.7}
-          >
+          {/* Non-interactive dot */}
+          <View style={{ position: "absolute", left: p.x - 7, top: (p.y ?? yOf(3)) - 7, width: 14, height: 14, alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
             {p.y != null ? (
               <View style={{ width: p.isSelected ? 14 : 10, height: p.isSelected ? 14 : 10, borderRadius: 7, backgroundColor: barColor(p.score), borderWidth: p.isSelected ? 2.5 : 1, borderColor: p.isSelected ? "#fff" : "rgba(255,255,255,0.5)" }} />
             ) : (
               <View style={{ width: 8, height: 8, borderRadius: 4, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)", backgroundColor: "transparent" }} />
             )}
+          </View>
+          {/* Tappable day label */}
+          <TouchableOpacity
+            style={{ position: "absolute", left: p.x - 16, top: GRAPH_H - 8, width: 32, height: 24, alignItems: "center", justifyContent: "center" }}
+            onPress={() => onDayPress(p.day)}
+            activeOpacity={0.7}
+          >
+            <Text style={{ color: p.isSelected ? "#a78bfa" : p.isToday ? "#a78bfa" : "rgba(255,255,255,0.35)", fontSize: 9, fontWeight: p.isSelected || p.isToday ? "700" : "500" }}>
+              {p.label}
+            </Text>
           </TouchableOpacity>
-          <Text style={{ position: "absolute", left: p.x - 14, top: GRAPH_H - 4, width: 28, textAlign: "center", color: p.isToday ? "#a78bfa" : "rgba(255,255,255,0.35)", fontSize: 9, fontWeight: p.isToday ? "700" : "500" }}>
-            {p.label}
-          </Text>
         </View>
       ))}
 
