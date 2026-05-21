@@ -157,7 +157,7 @@ async function saveEvents(events: CalendarEvent[]): Promise<void> {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-// Simple time-picker row: - HH + : + - MM +
+// Time-picker row — 12-hour format with AM/PM toggle
 function TimePicker({
   value,
   onChange,
@@ -168,55 +168,49 @@ function TimePicker({
   label: string;
 }) {
   const parts = value.split(":");
-  const h = parseInt(parts[0] ?? "0", 10) || 0;
+  const h24 = parseInt(parts[0] ?? "8", 10) || 0;
   const m = parseInt(parts[1] ?? "0", 10) || 0;
 
-  function setHM(newH: number, newM: number) {
-    const clampedH = Math.max(0, Math.min(23, newH));
-    const clampedM = Math.max(0, Math.min(59, newM));
-    onChange(
-      `${String(clampedH).padStart(2, "0")}:${String(clampedM).padStart(2, "0")}`
-    );
+  const isPM = h24 >= 12;
+  const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+
+  function update(newH12: number, newM: number, newIsPM: boolean) {
+    let ch = newH12;
+    if (ch < 1) ch = 12;
+    if (ch > 12) ch = 1;
+    let cm = newM;
+    if (cm < 0) cm = 55;
+    if (cm > 55) cm = 0;
+    const h24out = newIsPM ? (ch === 12 ? 12 : ch + 12) : (ch === 12 ? 0 : ch);
+    onChange(`${String(h24out).padStart(2, "0")}:${String(cm).padStart(2, "0")}`);
   }
+
+  const HIT = { top: 6, bottom: 6, left: 6, right: 6 };
 
   return (
     <View style={tp.row}>
       <Text style={tp.label}>{label}</Text>
       <View style={tp.controls}>
-        {/* Hours */}
-        <TouchableOpacity
-          style={tp.btn}
-          onPress={() => setHM(h - 1, m)}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
+        <TouchableOpacity style={tp.btn} onPress={() => update(h12 - 1, m, isPM)} hitSlop={HIT}>
           <Ionicons name="remove" size={16} color="#fff" />
         </TouchableOpacity>
-        <Text style={tp.val}>{String(h).padStart(2, "0")}</Text>
-        <TouchableOpacity
-          style={tp.btn}
-          onPress={() => setHM(h + 1, m)}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
+        <Text style={tp.val}>{String(h12).padStart(2, "0")}</Text>
+        <TouchableOpacity style={tp.btn} onPress={() => update(h12 + 1, m, isPM)} hitSlop={HIT}>
           <Ionicons name="add" size={16} color="#fff" />
         </TouchableOpacity>
 
         <Text style={tp.colon}>:</Text>
 
-        {/* Minutes */}
-        <TouchableOpacity
-          style={tp.btn}
-          onPress={() => setHM(h, m - 5)}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
+        <TouchableOpacity style={tp.btn} onPress={() => update(h12, m - 5, isPM)} hitSlop={HIT}>
           <Ionicons name="remove" size={16} color="#fff" />
         </TouchableOpacity>
         <Text style={tp.val}>{String(m).padStart(2, "0")}</Text>
-        <TouchableOpacity
-          style={tp.btn}
-          onPress={() => setHM(h, m + 5)}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
+        <TouchableOpacity style={tp.btn} onPress={() => update(h12, m + 5, isPM)} hitSlop={HIT}>
           <Ionicons name="add" size={16} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={tp.ampmBtn} onPress={() => update(h12, m, !isPM)}>
+          <Text style={tp.ampmTxt}>{isPM ? "PM" : "AM"}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -232,7 +226,7 @@ const tp = StyleSheet.create({
   label: {
     color: "rgba(255,255,255,0.5)",
     fontSize: 13,
-    width: 72,
+    width: 52,
   },
   controls: {
     flexDirection: "row",
@@ -251,7 +245,7 @@ const tp = StyleSheet.create({
     color: "#fff",
     fontSize: 20,
     fontWeight: "700",
-    width: 30,
+    width: 28,
     textAlign: "center",
   },
   colon: {
@@ -259,6 +253,19 @@ const tp = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     marginHorizontal: 2,
+  },
+  ampmBtn: {
+    backgroundColor: "#7c6af7",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginLeft: 4,
+  },
+  ampmTxt: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
 });
 
