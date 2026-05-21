@@ -29,9 +29,63 @@ type UserProfile = {
   hometown: string;
   occupation: string;
   pronouns: string;
+  wakeHour: number;  // 0–23
+  sleepHour: number; // 0–23
 };
 
 const STORAGE_KEY = "ensemble_user_profile";
+
+function fmt12(h24: number): string {
+  const isPM = h24 >= 12;
+  const h12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+  return `${h12}:00 ${isPM ? "PM" : "AM"}`;
+}
+
+function HourPicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (h: number) => void;
+}) {
+  const isPM = value >= 12;
+  const h12 = value === 0 ? 12 : value > 12 ? value - 12 : value;
+
+  function step(delta: number) {
+    let next = value + delta;
+    if (next < 0) next = 23;
+    if (next > 23) next = 0;
+    onChange(next);
+  }
+
+  function toggleAMPM() {
+    if (isPM) onChange(value === 12 ? 0 : value - 12);
+    else onChange(value === 0 ? 12 : value + 12 > 23 ? 23 : value + 12);
+  }
+
+  return (
+    <View style={s.hourRow}>
+      <Text style={s.hourLabel}>{label}</Text>
+      <View style={s.hourControls}>
+        <TouchableOpacity style={s.hourBtn} onPress={() => step(-1)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Ionicons name="remove" size={16} color="#fff" />
+        </TouchableOpacity>
+        <Text style={s.hourVal}>{String(h12).padStart(2, "0")}</Text>
+        <Text style={s.hourColon}>:00</Text>
+        <TouchableOpacity style={s.hourBtn} onPress={() => step(1)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Ionicons name="add" size={16} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.ampmBtn, isPM && s.ampmBtnPM]} onPress={toggleAMPM}>
+          <Text style={s.ampmTxt}>{isPM ? "PM" : "AM"}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const [name, setName] = useState("");
@@ -44,6 +98,8 @@ export default function ProfileScreen() {
   const [hometown, setHometown] = useState("");
   const [occupation, setOccupation] = useState("");
   const [pronouns, setPronouns] = useState("");
+  const [wakeHour, setWakeHour] = useState(7);
+  const [sleepHour, setSleepHour] = useState(23);
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
 
   useEffect(() => {
@@ -60,6 +116,8 @@ export default function ProfileScreen() {
         setHometown(p.hometown || "");
         setOccupation(p.occupation || "");
         setPronouns(p.pronouns || "");
+        setWakeHour(typeof p.wakeHour === "number" ? p.wakeHour : 7);
+        setSleepHour(typeof p.sleepHour === "number" ? p.sleepHour : 23);
       }
     });
   }, []);
@@ -92,6 +150,8 @@ export default function ProfileScreen() {
       hometown: hometown.trim(),
       occupation: occupation.trim(),
       pronouns: pronouns.trim(),
+      wakeHour,
+      sleepHour,
     };
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
     Alert.alert("Profile saved");
@@ -248,6 +308,36 @@ export default function ProfileScreen() {
             />
           </View>
 
+          {/* Daily Routine */}
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Daily Routine</Text>
+            <Text style={s.routineHint}>
+              Let your family know when you're typically awake
+            </Text>
+            <View style={s.routineRow}>
+              <Ionicons name="sunny-outline" size={18} color="#fbbf24" style={{ marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.label}>WAKE UP</Text>
+                <HourPicker
+                  label=""
+                  value={wakeHour}
+                  onChange={setWakeHour}
+                />
+              </View>
+            </View>
+            <View style={[s.routineRow, { marginTop: 4 }]}>
+              <Ionicons name="moon-outline" size={18} color="#a78bfa" style={{ marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.label}>BEDTIME</Text>
+                <HourPicker
+                  label=""
+                  value={sleepHour}
+                  onChange={setSleepHour}
+                />
+              </View>
+            </View>
+          </View>
+
           {/* Save */}
           <TouchableOpacity style={s.saveBtn} onPress={save}>
             <Text style={s.saveBtnText}>Save Profile</Text>
@@ -334,6 +424,71 @@ const s = StyleSheet.create({
   },
   dateBtnText: { color: "#f0f0f6", fontSize: 15 },
   dateBtnPlaceholder: { color: "rgba(255,255,255,0.3)", fontSize: 15 },
+
+  routineHint: {
+    color: "rgba(255,255,255,0.35)",
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  routineRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  hourRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 2,
+  },
+  hourLabel: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 13,
+    width: 0,
+  },
+  hourControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  hourBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hourVal: {
+    color: "#f0f0f6",
+    fontSize: 22,
+    fontWeight: "800",
+    width: 28,
+    textAlign: "center",
+  },
+  hourColon: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  ampmBtn: {
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+  },
+  ampmBtnPM: {
+    backgroundColor: "rgba(167,139,250,0.25)",
+    borderColor: "rgba(167,139,250,0.5)",
+  },
+  ampmTxt: {
+    color: "#f0f0f6",
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
 
   saveBtn: {
     width: "100%",

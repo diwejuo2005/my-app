@@ -160,52 +160,50 @@ function startGlobe() {
       .width(window.innerWidth)
       .height(window.innerHeight)
       .backgroundColor('#07080f')
-      .showGraticules(true)
+      .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2/example/img/earth-dark.jpg')
       .showAtmosphere(true)
       .atmosphereColor('#6b4fb8')
       .atmosphereAltitude(0.18);
 
-    var mat = myGlobe.globeMaterial();
-    mat.color.set('#162447');
-    mat.emissive.set('#0d1530');
-    mat.emissiveIntensity = 0.25;
-
     // Cluster by city
     var cityMap = {};
     MEMBERS.forEach(function(m) {
-      if (!cityMap[m.city]) cityMap[m.city] = { lat: m.lat, lng: m.lon, city: m.city, ids: [], names: [], rels: [] };
+      if (!cityMap[m.city]) cityMap[m.city] = { lat: m.lat, lng: m.lon, city: m.city, ids: [] };
       cityMap[m.city].ids.push(m.id);
-      cityMap[m.city].names.push(m.name);
-      cityMap[m.city].rels.push(m.relationship);
     });
     var clusters = Object.values(cityMap);
 
+    // Custom map-pin HTML elements
     myGlobe
-      .pointsData(clusters)
-      .pointLat(function(d) { return d.lat; })
-      .pointLng(function(d) { return d.lng; })
-      .pointColor(function() { return '#a78bfa'; })
-      .pointRadius(0.55)
-      .pointAltitude(0.015)
-      .onPointClick(function(d) {
-        try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city: d.city, memberIds: d.ids})); } catch(e) {}
+      .htmlElementsData(clusters)
+      .htmlLat(function(d) { return d.lat; })
+      .htmlLng(function(d) { return d.lng; })
+      .htmlAltitude(0.01)
+      .htmlTransitionDuration(0)
+      .htmlElement(function(d) {
+        var count = d.ids.length;
+        var fill = count > 1 ? '#7c6af7' : '#EA4335';
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'position:relative;transform:translate(-50%,-100%);cursor:pointer;';
+        wrap.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 26 34">' +
+          '<path d="M13 0C5.82 0 0 5.82 0 13C0 22.75 13 34 13 34C13 34 26 22.75 26 13C26 5.82 20.18 0 13 0Z" fill="' + fill + '" stroke="white" stroke-width="2.5"/>' +
+          '<circle cx="13" cy="13" r="6" fill="white"/>' +
+          '</svg>' +
+          (count > 1 ? '<div style="position:absolute;top:-5px;right:-10px;background:#a78bfa;border-radius:8px;padding:0 5px;height:16px;font-size:9px;font-weight:800;color:white;text-align:center;line-height:16px;border:1.5px solid white;font-family:sans-serif">' + count + '</div>' : '') +
+          '<div style="position:absolute;top:34px;left:50%;transform:translateX(-50%);white-space:nowrap;color:rgba(255,255,255,0.95);font-size:9px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,1);font-family:sans-serif;pointer-events:none">' + d.city + '</div>';
+        wrap.addEventListener('click', function() {
+          try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city:d.city, memberIds:d.ids})); } catch(e) {}
+        });
+        return wrap;
       });
-
-    myGlobe
-      .labelsData(clusters)
-      .labelLat(function(d) { return d.lat; })
-      .labelLng(function(d) { return d.lng; })
-      .labelText(function(d) { return d.ids.length > 1 ? d.city + ' (' + d.ids.length + ')' : d.city; })
-      .labelColor(function() { return 'rgba(240,240,246,0.9)'; })
-      .labelSize(0.45)
-      .labelDotRadius(0.35)
-      .labelAltitude(0.02);
 
     var ctrl = myGlobe.controls();
     ctrl.autoRotate = true;
-    ctrl.autoRotateSpeed = 0.6;
+    ctrl.autoRotateSpeed = 0.5;
     ctrl.enableZoom = true;
-    ctrl.minDistance = 200;
+    ctrl.minDistance = 150;
+    ctrl.maxDistance = 600;
 
     window.addEventListener('resize', function() {
       myGlobe.width(window.innerWidth).height(window.innerHeight);

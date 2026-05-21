@@ -44,7 +44,8 @@ function ScrollableTabBar({ state, descriptors, navigation }: BottomTabBarProps)
       >
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
-          if ((options as any).href === null) return null;  // ← ADD THIS LINE
+          const HIDDEN = new Set(['news', 'people', 'chat', 'moments']);
+          if (HIDDEN.has(route.name)) return null;
           const isFocused = state.index === index;
           const label = (options.title ?? route.name) as string;
           const color = isFocused ? "#a78bfa" : "rgba(255,255,255,0.3)";
