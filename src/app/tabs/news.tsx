@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -429,15 +430,15 @@ export default function NewsScreen() {
       const items = await fetchNews(member);
       const sorted = sortItems(items);
       setNews(sorted);
-      for (const article of sorted) {
-        if (article.level === "critical") {
-          notifyCritical(member, {
-            title: article.title,
-            link: article.link,
-            desc: article.desc,
-          }).catch(() => {});
-        }
+      const SEEN_KEY = `ensemble_seen_news_${members[active]?.id}`;
+      const seenRaw = await AsyncStorage.getItem(SEEN_KEY);
+      const seenSet = new Set<string>(seenRaw ? JSON.parse(seenRaw) : []);
+      const newCritical = sorted.filter(a => a.level === 'critical' && !seenSet.has(a.link));
+      for (const article of newCritical) {
+        seenSet.add(article.link);
+        notifyCritical(member, { title: article.title, link: article.link, desc: article.desc }).catch(() => {});
       }
+      await AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...seenSet].slice(-300)));
     };
 
     load().finally(() => setLoading(false));

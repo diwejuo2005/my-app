@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -161,7 +161,7 @@ function useWeather(member: Member) {
     }
 
     doFetch();
-    const interval = setInterval(doFetch, 10 * 60 * 1000);
+    const interval = setInterval(doFetch, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [member.id]);
 
@@ -178,18 +178,10 @@ function FamilyCard({ member, tick, onView }: { member: Member; tick: number; on
     member.sleepHour,
   );
   const tz = safeTimezone(member.timezone);
-  const timeStr = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(new Date());
-  const dateStr = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  }).format(new Date());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const timeStr = useMemo(() => new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(new Date()), [tick, tz]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const dateStr = useMemo(() => new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long", month: "short", day: "numeric" }).format(new Date()), [tick, tz]);
 
   const avatarColor = getAvatarColor(member.id);
   const initials = member.name[0].toUpperCase();

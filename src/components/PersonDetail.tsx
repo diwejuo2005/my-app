@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { Audio } from 'expo-av';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
@@ -35,6 +36,8 @@ type Message = {
   id: string;
   text: string;
   imageUri?: string;
+  videoUri?: string;
+  audioUri?: string;
   timestamp: string;
   sent: boolean;
 };
@@ -175,28 +178,58 @@ function classifyArticle(title: string, desc: string): 'critical' | 'important' 
   return 'normal';
 }
 
+const REGION_TAGS: Record<string, string> = {
+  NG:'world/africa',GH:'world/africa',KE:'world/africa',ZA:'world/africa',EG:'world/africa',ET:'world/africa',
+  IN:'world/asia-pacific',JP:'world/asia-pacific',CN:'world/asia-pacific',AU:'world/asia-pacific',KR:'world/asia-pacific',
+  GB:'world/europe',FR:'world/europe',DE:'world/europe',IT:'world/europe',ES:'world/europe',PL:'world/europe',
+  US:'world/americas',CA:'world/americas',MX:'world/americas',BR:'world/americas',AR:'world/americas',
+  SA:'world/middle-east',IL:'world/middle-east',TR:'world/middle-east',IQ:'world/middle-east',IR:'world/middle-east',
+};
+
+async function guardianFetch(url: string): Promise<NewsArticle[]> {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return (data.response?.results || []).map((item: any) => {
+      const desc = (item.fields?.trailText || '').replace(/<[^>]+>/g, '');
+      return { title: item.webTitle, link: item.webUrl, pubDate: item.webPublicationDate, desc, level: classifyArticle(item.webTitle, desc) };
+    });
+  } catch { return []; }
+}
+
 async function fetchMemberNews(member: Member): Promise<NewsArticle[]> {
-  const tag = COUNTRY_TAG[member.country];
-  const url = tag
-    ? `https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`
-    : `https://content.guardianapis.com/search?q=${encodeURIComponent(member.country)}&section=world&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
-  const res = await fetch(url);
-  const data = await res.json();
-  const articles: NewsArticle[] = (data.response?.results || []).map((item: any) => {
-    const desc = (item.fields?.trailText || '').replace(/<[^>]+>/g, '');
-    return {
-      title: item.webTitle,
-      link: item.webUrl,
-      pubDate: item.webPublicationDate,
-      desc,
-      level: classifyArticle(item.webTitle, desc),
-    };
-  });
   const RANK: Record<string, number> = { critical: 0, important: 1, normal: 2 };
-  return articles.sort((a, b) => {
-    const r = (RANK[a.level] ?? 2) - (RANK[b.level] ?? 2);
-    return r !== 0 ? r : new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
-  });
+  const sort = (arr: NewsArticle[]) =>
+    arr.sort((a, b) => {
+      const r = (RANK[a.level] ?? 2) - (RANK[b.level] ?? 2);
+      return r !== 0 ? r : new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+    });
+
+  const seen = new Set<string>();
+  const merge = (existing: NewsArticle[], incoming: NewsArticle[]) => {
+    for (const a of incoming) { if (!seen.has(a.link)) { seen.add(a.link); existing.push(a); } }
+    return existing;
+  };
+
+  let articles: NewsArticle[] = [];
+
+  // 1. Country-specific tag
+  const tag = COUNTRY_TAG[member.country];
+  if (tag) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`));
+
+  // 2. City search
+  if (articles.length < 5 && member.city) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?q=${encodeURIComponent('"' + member.city + '"')}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
+
+  // 3. Region fallback
+  if (articles.length < 5) {
+    const region = REGION_TAGS[member.country];
+    if (region) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${region}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
+  }
+
+  // 4. World news as last resort
+  if (articles.length < 5) merge(articles, await guardianFetch('https://content.guardianapis.com/world?api-key=test&show-fields=trailText&page-size=10&order-by=newest'));
+
+  return sort(articles).slice(0, 20);
 }
 
 async function searchCities(query: string): Promise<CityResult[]> {
@@ -319,15 +352,15 @@ function ChatTab({ member }: { member: Member }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState('');
   const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
     AsyncStorage.getItem(storageKey).then((raw) => {
-      if (raw) {
-        try {
-          setMessages(JSON.parse(raw));
-        } catch {}
-      }
+      if (raw) { try { setMessages(JSON.parse(raw)); } catch {} }
     });
   }, [member.id]);
 
@@ -338,117 +371,139 @@ function ChatTab({ member }: { member: Member }) {
 
   function sendText() {
     if (!text.trim()) return;
-    const msg: Message = {
-      id: Date.now().toString(),
-      text: text.trim(),
-      timestamp: new Date().toISOString(),
-      sent: true,
-    };
-    const updated = [...messages, msg];
-    saveMessages(updated);
+    const msg: Message = { id: Date.now().toString(), text: text.trim(), timestamp: new Date().toISOString(), sent: true };
+    saveMessages([...messages, msg]);
     setText('');
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
-  async function pickImage() {
+  async function pickMedia(type: 'image' | 'video') {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.8,
+      mediaTypes: type === 'image' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: false, quality: 0.8,
     });
     if (!result.canceled && result.assets.length > 0) {
-      const msg: Message = {
-        id: Date.now().toString(),
-        text: '',
-        imageUri: result.assets[0].uri,
-        timestamp: new Date().toISOString(),
-        sent: true,
-      };
-      const updated = [...messages, msg];
-      saveMessages(updated);
+      const asset = result.assets[0];
+      const msg: Message = { id: Date.now().toString(), text: '', timestamp: new Date().toISOString(), sent: true, ...(type === 'image' ? { imageUri: asset.uri } : { videoUri: asset.uri }) };
+      saveMessages([...messages, msg]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
     }
   }
 
+  async function startRecording() {
+    try {
+      await Audio.requestPermissionsAsync();
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      setRecording(rec);
+      setIsRecording(true);
+    } catch { Alert.alert('Could not start recording'); }
+  }
+
+  async function stopRecording() {
+    if (!recording) return;
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+      setIsRecording(false);
+      if (uri) {
+        const msg: Message = { id: Date.now().toString(), text: '', audioUri: uri, timestamp: new Date().toISOString(), sent: true };
+        saveMessages([...messages, msg]);
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      }
+    } catch {}
+  }
+
+  function longPressMessage(item: Message) {
+    if (!item.sent) return;
+    const opts: any[] = [
+      { text: 'Delete', style: 'destructive', onPress: () => saveMessages(messages.filter(m => m.id !== item.id)) },
+    ];
+    if (item.text) opts.unshift({ text: 'Edit', onPress: () => { setEditingId(item.id); setEditText(item.text); } });
+    opts.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Message', undefined, opts);
+  }
+
+  function saveEdit() {
+    if (!editText.trim()) return;
+    saveMessages(messages.map(m => m.id === editingId ? { ...m, text: editText.trim() } : m));
+    setEditingId(null);
+    setEditText('');
+  }
+
+  async function playAudio(uri: string) {
+    try {
+      const { sound } = await Audio.Sound.createAsync({ uri });
+      await sound.playAsync();
+    } catch { Alert.alert('Could not play audio'); }
+  }
+
   function renderMessage({ item }: { item: Message }) {
+    const isEditing = editingId === item.id;
     return (
-      <View
-        style={[
-          d.bubble,
-          item.sent ? d.bubbleSent : d.bubbleReceived,
-        ]}
+      <TouchableOpacity
+        style={[d.bubble, item.sent ? d.bubbleSent : d.bubbleReceived]}
+        onLongPress={() => longPressMessage(item)}
+        activeOpacity={0.85}
+        delayLongPress={400}
       >
         {item.imageUri ? (
           <TouchableOpacity onPress={() => setZoomImage(item.imageUri!)}>
-            <Image
-              source={{ uri: item.imageUri }}
-              style={{ width: 200, height: 200, borderRadius: 12 }}
-              resizeMode="cover"
-            />
+            <Image source={{ uri: item.imageUri }} style={{ width: 200, height: 200, borderRadius: 12 }} resizeMode="cover" />
           </TouchableOpacity>
         ) : null}
-        {!!item.text && (
-          <Text style={[d.bubbleText, item.sent ? d.bubbleTextSent : d.bubbleTextReceived]}>
-            {item.text}
-          </Text>
-        )}
+        {item.videoUri ? (
+          <View style={{ width: 200, height: 140, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.8)" />
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 4 }}>Video</Text>
+          </View>
+        ) : null}
+        {item.audioUri ? (
+          <TouchableOpacity onPress={() => playAudio(item.audioUri!)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+            <Ionicons name="play-circle" size={28} color="#a78bfa" />
+            <Text style={{ color: '#a78bfa', fontSize: 13, fontWeight: '600' }}>Voice message</Text>
+          </TouchableOpacity>
+        ) : null}
+        {isEditing ? (
+          <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+            <TextInput style={{ flex: 1, color: '#fff', fontSize: 14, borderBottomWidth: 1, borderBottomColor: '#a78bfa' }} value={editText} onChangeText={setEditText} autoFocus />
+            <TouchableOpacity onPress={saveEdit}><Ionicons name="checkmark" size={18} color="#a78bfa" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditingId(null)}><Ionicons name="close" size={18} color="rgba(255,255,255,0.5)" /></TouchableOpacity>
+          </View>
+        ) : item.text ? (
+          <Text style={[d.bubbleText, item.sent ? d.bubbleTextSent : d.bubbleTextReceived]}>{item.text}</Text>
+        ) : null}
         <Text style={d.bubbleTime}>{timeAgo(item.timestamp)}</Text>
-      </View>
+      </TouchableOpacity>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={120}
-    >
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 16 }}
-        showsVerticalScrollIndicator={false}
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={120}>
+      <FlatList ref={listRef} data={messages} keyExtractor={(item) => item.id} renderItem={renderMessage}
+        contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 16 }} showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-        ListEmptyComponent={
-          <Text style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 60, fontSize: 14 }}>
-            No messages yet
-          </Text>
-        }
+        ListEmptyComponent={<Text style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 60, fontSize: 14 }}>No messages yet</Text>}
       />
       <View style={d.inputRow}>
-        <TouchableOpacity onPress={pickImage} style={d.iconBtn}>
+        <TouchableOpacity onPress={() => pickMedia('image')} style={d.iconBtn}>
           <Ionicons name="camera-outline" size={22} color="#a78bfa" />
         </TouchableOpacity>
-        <TextInput
-          style={d.chatInput}
-          value={text}
-          onChangeText={setText}
-          placeholder="Message..."
-          placeholderTextColor="rgba(255,255,255,0.3)"
-          returnKeyType="send"
-          onSubmitEditing={sendText}
-          multiline={false}
-        />
+        <TouchableOpacity onPress={() => pickMedia('video')} style={d.iconBtn}>
+          <Ionicons name="videocam-outline" size={22} color="#a78bfa" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={isRecording ? stopRecording : startRecording} style={[d.iconBtn, isRecording && { backgroundColor: 'rgba(239,68,68,0.2)' }]}>
+          <Ionicons name={isRecording ? "stop-circle" : "mic-outline"} size={22} color={isRecording ? "#ef4444" : "#a78bfa"} />
+        </TouchableOpacity>
+        <TextInput style={d.chatInput} value={text} onChangeText={setText} placeholder="Message..." placeholderTextColor="rgba(255,255,255,0.3)" returnKeyType="send" onSubmitEditing={sendText} multiline={false} />
         <TouchableOpacity onPress={sendText} style={d.sendBtn}>
           <Ionicons name="send" size={18} color="white" />
         </TouchableOpacity>
       </View>
-
       <Modal visible={!!zoomImage} transparent animationType="fade">
-        <TouchableOpacity
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}
-          activeOpacity={1}
-          onPress={() => setZoomImage(null)}
-        >
-          {zoomImage ? (
-            <Image
-              source={{ uri: zoomImage }}
-              style={{ width: '90%', height: '70%', borderRadius: 16 }}
-              resizeMode="contain"
-            />
-          ) : null}
+        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }} activeOpacity={1} onPress={() => setZoomImage(null)}>
+          {zoomImage ? <Image source={{ uri: zoomImage }} style={{ width: '90%', height: '70%', borderRadius: 16 }} resizeMode="contain" /> : null}
         </TouchableOpacity>
       </Modal>
     </KeyboardAvoidingView>
