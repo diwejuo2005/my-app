@@ -163,33 +163,31 @@ async function saveEvents(events: CalendarEvent[]): Promise<void> {
 // Device calendar helpers
 // ---------------------------------------------------------------------------
 
+function parseEvDate(raw: Date | string | undefined): Date | null {
+  if (!raw) return null;
+  const d = raw instanceof Date ? raw : new Date(raw as string);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function mapDeviceEvent(
   ev: Calendar.Event,
   calColor: string
 ): CalendarEvent | null {
-  // All-day events have a date-only startDate string ("2026-05-18") which
-  // parses as midnight UTC — this shifts the day in local time. Skip them;
-  // they need a separate header row which we'll add later.
-  if (ev.allDay) return null;
+  // All-day events have no time component — skip them from the timed grid
+  if (ev.allDay === true) return null;
 
-  // expo-calendar returns ISO 8601 strings on iOS/Android, but guard both cases.
-  const start = ev.startDate instanceof Date
-    ? ev.startDate
-    : new Date(ev.startDate as string);
-  const endRaw = ev.endDate ?? ev.startDate;
-  const end = endRaw instanceof Date
-    ? endRaw
-    : new Date(endRaw as string);
+  const start = parseEvDate(ev.startDate);
+  if (!start) return null;
 
-  if (isNaN(start.getTime())) return null;
+  const end = parseEvDate(ev.endDate) ?? new Date(start.getTime() + 60 * 60 * 1000);
 
   const sh = start.getHours();
   const sm = start.getMinutes();
 
-  // Event starts after our grid — skip
-  if (sh > GRID_END_HOUR) return null;
+  // Skip events that start entirely outside the visible grid (past 11 PM)
+  if (sh >= GRID_END_HOUR && sm >= 59) return null;
 
-  // If the event ends on a different calendar day, cap it at grid end
+  // If an event ends on a different day (multi-day or past midnight), cap at grid end
   const endsNextDay = toDateString(end) !== toDateString(start);
   const eh = endsNextDay ? GRID_END_HOUR : end.getHours();
   const em = endsNextDay ? 0 : end.getMinutes();
@@ -200,10 +198,8 @@ function mapDeviceEvent(
   const startTime = `${String(sc.h).padStart(2, "0")}:${String(sc.m).padStart(2, "0")}`;
   let endTime = `${String(ec.h).padStart(2, "0")}:${String(ec.m).padStart(2, "0")}`;
 
-  // Guarantee at least a 30-minute visible block
   if (endTime <= startTime) {
-    const nextH = Math.min(GRID_END_HOUR, sc.h + 1);
-    endTime = `${String(nextH).padStart(2, "0")}:${String(sc.m).padStart(2, "0")}`;
+    endTime = `${String(Math.min(GRID_END_HOUR, sc.h + 1)).padStart(2, "0")}:${String(sc.m).padStart(2, "0")}`;
   }
 
   return {
@@ -1161,7 +1157,7 @@ const VIS_LABEL: Record<CalendarVisibility, string> = {
 
 type SyncBannerProps = {
   synced: boolean;
-  calendarCount: number;
+  eventCount: number;
   loading: boolean;
   onSync: () => void;
   onRevoke: () => void;
@@ -1171,7 +1167,7 @@ type SyncBannerProps = {
 
 function DeviceSyncBanner({
   synced,
-  calendarCount,
+  eventCount,
   loading,
   onSync,
   onRevoke,
@@ -1191,18 +1187,20 @@ function DeviceSyncBanner({
           size={16}
           color={synced ? "#34d399" : "rgba(255,255,255,0.4)"}
         />
-        {synced ? (
+        {loading ? (
+          <>
+            <ActivityIndicator size="small" color={ACCENT} style={{ marginLeft: 4 }} />
+            <Text style={dsb.disconnTxt}>Syncing…</Text>
+          </>
+        ) : synced ? (
           <>
             <View style={dsb.dot} />
             <Text style={dsb.connTxt}>
-              {calendarCount} calendar{calendarCount !== 1 ? "s" : ""} synced
+              {eventCount} event{eventCount !== 1 ? "s" : ""} synced · tap to remove
             </Text>
           </>
         ) : (
-          <Text style={dsb.disconnTxt}>Sync device calendars</Text>
-        )}
-        {loading && (
-          <ActivityIndicator size="small" color={ACCENT} style={{ marginLeft: 6 }} />
+          <Text style={dsb.disconnTxt}>Tap to sync your calendars</Text>
         )}
       </TouchableOpacity>
 
@@ -1264,8 +1262,8 @@ export default function CalendarScreen() {
   const [modalInitial, setModalInitial] = useState<Partial<CalendarEvent>>({});
 
   const [deviceEvents, setDeviceEvents] = useState<CalendarEvent[]>([]);
-  const [deviceCalCount, setDeviceCalCount] = useState(0);
-  const [permissionGranted, setPermissionGranted] = useState(false);
+  const [deviceEventCount, setDeviceEventCount] = useState(0);
+  const [permissionGranted, setPermissionGranted] = useState<boolean | null>(null); // null = not yet checked
   const [syncLoading, setSyncLoading] = useState(false);
 
   const [visibility, setVisibility] = useState<CalendarVisibility>("full");
@@ -1280,69 +1278,87 @@ export default function CalendarScreen() {
     return Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
   }, [today, weekOffset]);
 
-  // Load persisted local events + visibility on mount
+  // On mount: load local data then check OS permission status
   useEffect(() => {
     Promise.all([
       loadEvents(),
       AsyncStorage.getItem(VISIBILITY_KEY),
-      AsyncStorage.getItem("ensemble_cal_permission"),
-    ]).then(([localEvs, visRaw, permRaw]) => {
+    ]).then(([localEvs, visRaw]) => {
       setEvents(localEvs);
       if (visRaw) setVisibility(visRaw as CalendarVisibility);
-      if (permRaw === "granted") setPermissionGranted(true);
+    });
+
+    Calendar.getCalendarPermissionsAsync().then(({ status }) => {
+      const granted = status === "granted";
+      setPermissionGranted(granted);
+      if (granted) syncDeviceCalendar();
     });
   }, []);
 
-  // Re-sync device calendar every time this tab comes into focus
+  // Re-sync every time this tab is focused
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.getItem("ensemble_cal_permission").then((perm) => {
-        if (perm === "granted") loadDeviceEvents();
-      });
-    }, [])
+      if (permissionGranted) syncDeviceCalendar();
+    }, [permissionGranted])
   );
 
-  async function loadDeviceEvents() {
+  // Live refresh: poll every 30 seconds while tab is active
+  useEffect(() => {
+    if (!permissionGranted) return;
+    const id = setInterval(() => syncDeviceCalendar(), 30_000);
+    return () => clearInterval(id);
+  }, [permissionGranted]);
+
+  async function syncDeviceCalendar() {
     setSyncLoading(true);
     try {
+      // Verify OS permission is still valid before proceeding
+      const { status } = await Calendar.getCalendarPermissionsAsync();
+      if (status !== "granted") {
+        setPermissionGranted(false);
+        setSyncLoading(false);
+        return;
+      }
+
       const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-      const calIds = cals.map((c) => c.id);
       const calColorMap: Record<string, string> = {};
-      for (const c of cals) calColorMap[c.id] = c.color ?? "#60a5fa";
+      for (const c of cals) calColorMap[c.id] = c.color || "#60a5fa";
 
-      setDeviceCalCount(cals.length);
-
-      // Fetch 3 months: 1 month back → 2 months forward
-      const start = addDays(today, -30);
-      const end = addDays(today, 60);
-      const raw = await Calendar.getEventsAsync(calIds, start, end);
+      // Fetch ±2 months around today so navigating weeks feels instant
+      const rangeStart = addDays(today, -60);
+      const rangeEnd = addDays(today, 60);
+      const raw = await Calendar.getEventsAsync(
+        cals.map((c) => c.id),
+        rangeStart,
+        rangeEnd
+      );
 
       const mapped = raw
-        .map((ev) => mapDeviceEvent(ev, calColorMap[ev.calendarId] ?? "#60a5fa"))
-        .filter(Boolean) as CalendarEvent[];
+        .map((ev) => mapDeviceEvent(ev, calColorMap[ev.calendarId] || "#60a5fa"))
+        .filter((e): e is CalendarEvent => e !== null);
 
       setDeviceEvents(mapped);
-    } catch {
-      // Permission may have been revoked outside the app — reset quietly
-      setPermissionGranted(false);
-      AsyncStorage.removeItem("ensemble_cal_permission");
+      setDeviceEventCount(mapped.length);
+    } catch (err) {
+      console.warn("[Ensemble] Calendar sync error:", err);
+      // Don't touch permission state here — a transient error should not
+      // force the user to re-authorise.
     } finally {
       setSyncLoading(false);
     }
   }
 
-  async function handleSync() {
+  async function handleRequestPermission() {
     setSyncLoading(true);
     try {
       const { status } = await Calendar.requestCalendarPermissionsAsync();
       if (status === "granted") {
         setPermissionGranted(true);
-        AsyncStorage.setItem("ensemble_cal_permission", "granted");
-        await loadDeviceEvents();
+        await syncDeviceCalendar();
       } else {
         Alert.alert(
-          "Permission needed",
-          "Ensemble needs access to your calendar to show your events. Enable it in Settings → Ensemble → Calendars."
+          "Calendar access denied",
+          "To sync your events, go to Settings → Ensemble → Calendars and allow access."
         );
       }
     } finally {
@@ -1353,7 +1369,7 @@ export default function CalendarScreen() {
   function handleRevoke() {
     Alert.alert(
       "Remove calendar sync?",
-      "Your device calendar events will be hidden from Ensemble.",
+      "Your device calendar events will be hidden from Ensemble. You can re-enable this at any time.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -1362,8 +1378,7 @@ export default function CalendarScreen() {
           onPress: () => {
             setPermissionGranted(false);
             setDeviceEvents([]);
-            setDeviceCalCount(0);
-            AsyncStorage.removeItem("ensemble_cal_permission");
+            setDeviceEventCount(0);
           },
         },
       ]
@@ -1427,6 +1442,15 @@ export default function CalendarScreen() {
     setModalVisible(true);
   }
 
+  // Permission not yet checked — still loading
+  if (permissionGranted === null) {
+    return (
+      <View style={[s.root, { alignItems: "center", justifyContent: "center" }]}>
+        <ActivityIndicator color={ACCENT} />
+      </View>
+    );
+  }
+
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={BG} />
@@ -1440,9 +1464,9 @@ export default function CalendarScreen() {
 
       <DeviceSyncBanner
         synced={permissionGranted}
-        calendarCount={deviceCalCount}
+        eventCount={deviceEventCount}
         loading={syncLoading}
-        onSync={handleSync}
+        onSync={handleRequestPermission}
         onRevoke={handleRevoke}
         visibility={visibility}
         onVisibilityPress={() => setShowVisibility(true)}
