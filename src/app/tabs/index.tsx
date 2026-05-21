@@ -312,9 +312,6 @@ export default function HomeScreen() {
     });
   }, [members]);
 
-  const timezones = new Set(members.map((m) => m.timezone)).size;
-  const countries = new Set(members.map((m) => m.country)).size;
-
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" />
@@ -323,20 +320,6 @@ export default function HomeScreen() {
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
-          <View style={s.statRow}>
-            <View style={s.statCard}>
-              <Text style={s.statNum}>{members.length}</Text>
-              <Text style={s.statLabel}>People</Text>
-            </View>
-            <View style={s.statCard}>
-              <Text style={s.statNum}>{timezones}</Text>
-              <Text style={s.statLabel}>Time Zones</Text>
-            </View>
-            <View style={s.statCard}>
-              <Text style={s.statNum}>{countries}</Text>
-              <Text style={s.statLabel}>Countries</Text>
-            </View>
-          </View>
           {members.map((m) => (
             <FamilyCard key={m.id} member={m} tick={tick} onView={() => setViewingMember(m)} />
           ))}
@@ -381,18 +364,6 @@ export default function HomeScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#07080f" },
   scroll: { padding: 16, gap: 14 },
-  statRow: { flexDirection: "row", gap: 10, marginBottom: 6 },
-  statCard: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 16,
-    padding: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
-  },
-  statNum: { fontSize: 26, fontWeight: "800", color: "#f0f0f6" },
-  statLabel: { fontSize: 11, color: "rgba(255,255,255,0.4)", marginTop: 2 },
   card: { borderRadius: 22, padding: 20 },
   cardTop: {
     flexDirection: "row",

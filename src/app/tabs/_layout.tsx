@@ -207,6 +207,10 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen name="news" options={{ href: null } as any} />
+      <Tabs.Screen name="people" options={{ href: null } as any} />
+      <Tabs.Screen name="chat" options={{ href: null } as any} />
+      <Tabs.Screen name="moments" options={{ href: null } as any} />
     </Tabs>
   );
 }

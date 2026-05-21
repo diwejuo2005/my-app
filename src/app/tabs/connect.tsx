@@ -217,9 +217,18 @@ function MyMoodTab() {
 
   useEffect(() => {
     AsyncStorage.multiGet([MY_MOOD_KEY, MY_NOTES_KEY, REMINDER_KEY]).then(
-      ([[, mood], [, notes], [, reminder]]) => {
+      async ([[, mood], [, notes], [, reminder]]) => {
         if (mood) {
-          try { setMoodMap(JSON.parse(mood)); } catch {}
+          try {
+            const parsed: MoodMap = JSON.parse(mood);
+            const weekDays = new Set(currentWeekDays());
+            const filtered: MoodMap = {};
+            Object.keys(parsed).forEach(d => { if (weekDays.has(d)) filtered[d] = parsed[d]; });
+            setMoodMap(filtered);
+            if (Object.keys(filtered).length !== Object.keys(parsed).length) {
+              await AsyncStorage.setItem(MY_MOOD_KEY, JSON.stringify(filtered));
+            }
+          } catch {}
         }
         if (notes) {
           try {
