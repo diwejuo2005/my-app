@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
@@ -23,6 +24,11 @@ type UserProfile = {
   bio: string;
   city: string;
   birthday: string;
+  phone: string;
+  email: string;
+  hometown: string;
+  occupation: string;
+  pronouns: string;
 };
 
 const STORAGE_KEY = "ensemble_user_profile";
@@ -33,6 +39,11 @@ export default function ProfileScreen() {
   const [bio, setBio] = useState("");
   const [city, setCity] = useState("");
   const [birthday, setBirthday] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [hometown, setHometown] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [pronouns, setPronouns] = useState("");
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
 
   useEffect(() => {
@@ -44,6 +55,11 @@ export default function ProfileScreen() {
         setBio(p.bio || "");
         setCity(p.city || "");
         setBirthday(p.birthday || "");
+        setPhone(p.phone || "");
+        setEmail(p.email || "");
+        setHometown(p.hometown || "");
+        setOccupation(p.occupation || "");
+        setPronouns(p.pronouns || "");
       }
     });
   }, []);
@@ -71,6 +87,11 @@ export default function ProfileScreen() {
       bio: bio.trim(),
       city: city.trim(),
       birthday,
+      phone: phone.trim(),
+      email: email.trim(),
+      hometown: hometown.trim(),
+      occupation: occupation.trim(),
+      pronouns: pronouns.trim(),
     };
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
     Alert.alert("Profile saved");
@@ -89,86 +110,152 @@ export default function ProfileScreen() {
         }}
       />
       <StatusBar barStyle="light-content" />
-      <ScrollView
-        style={s.root}
-        contentContainerStyle={s.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        {/* Avatar */}
-        <TouchableOpacity style={s.avatarWrap} onPress={pickPhoto}>
-          {photoUri ? (
-            <Image source={{ uri: photoUri }} style={s.avatar} />
-          ) : (
-            <View style={[s.avatar, s.avatarPlaceholder]}>
-              <Text style={s.avatarInitial}>{initials}</Text>
+        <ScrollView
+          style={s.root}
+          contentContainerStyle={s.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Avatar */}
+          <TouchableOpacity style={s.avatarWrap} onPress={pickPhoto}>
+            {photoUri ? (
+              <Image source={{ uri: photoUri }} style={s.avatar} />
+            ) : (
+              <View style={[s.avatar, s.avatarPlaceholder]}>
+                <Text style={s.avatarInitial}>{initials}</Text>
+              </View>
+            )}
+            <View style={s.cameraIcon}>
+              <Ionicons name="camera" size={16} color="#f0f0f6" />
             </View>
-          )}
-          <View style={s.cameraIcon}>
-            <Ionicons name="camera" size={16} color="#f0f0f6" />
-          </View>
-        </TouchableOpacity>
-        <Text style={s.avatarHint}>Tap to change photo</Text>
-
-        {/* Form */}
-        <View style={s.card}>
-          <Text style={s.label}>DISPLAY NAME</Text>
-          <TextInput
-            style={s.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Your name"
-            placeholderTextColor="rgba(255,255,255,0.3)"
-          />
-
-          <Text style={s.label}>BIO / TAGLINE</Text>
-          <TextInput
-            style={s.input}
-            value={bio}
-            onChangeText={setBio}
-            placeholder="A short bio or tagline"
-            placeholderTextColor="rgba(255,255,255,0.3)"
-          />
-
-          <Text style={s.label}>CITY</Text>
-          <TextInput
-            style={s.input}
-            value={city}
-            onChangeText={setCity}
-            placeholder="Where are you based?"
-            placeholderTextColor="rgba(255,255,255,0.3)"
-          />
-
-          <Text style={s.label}>BIRTHDAY</Text>
-          <TouchableOpacity
-            style={s.dateBtn}
-            onPress={() => setShowBirthdayPicker(true)}
-          >
-            <Text style={s.dateBtnText}>
-              {birthday ? birthday : "Tap to set birthday"}
-            </Text>
           </TouchableOpacity>
-          {showBirthdayPicker && (
-            <DateTimePicker
-              value={birthday ? new Date(birthday) : new Date(1990, 0, 1)}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              maximumDate={new Date()}
-              onChange={(_, d) => {
-                setShowBirthdayPicker(false);
-                if (d) setBirthday(d.toISOString().split("T")[0]);
-              }}
+          <Text style={s.avatarHint}>Tap to change photo</Text>
+
+          {/* Basic info */}
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Basic Info</Text>
+
+            <Text style={s.label}>DISPLAY NAME</Text>
+            <TextInput
+              style={s.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Your name"
+              placeholderTextColor="rgba(255,255,255,0.3)"
             />
-          )}
-        </View>
 
-        {/* Save */}
-        <TouchableOpacity style={s.saveBtn} onPress={save}>
-          <Text style={s.saveBtnText}>Save Profile</Text>
-        </TouchableOpacity>
+            <Text style={s.label}>PRONOUNS</Text>
+            <TextInput
+              style={s.input}
+              value={pronouns}
+              onChangeText={setPronouns}
+              placeholder="e.g. she/her, he/him, they/them"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+            />
 
-        <View style={{ height: 60 }} />
-      </ScrollView>
+            <Text style={s.label}>DATE OF BIRTH</Text>
+            <TouchableOpacity
+              style={s.dateBtn}
+              onPress={() => setShowBirthdayPicker(true)}
+            >
+              <Text style={birthday ? s.dateBtnText : s.dateBtnPlaceholder}>
+                {birthday ? birthday : "Tap to set birthday"}
+              </Text>
+            </TouchableOpacity>
+            {showBirthdayPicker && (
+              <DateTimePicker
+                value={birthday ? new Date(birthday) : new Date(1995, 0, 1)}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                maximumDate={new Date()}
+                onChange={(_, d) => {
+                  setShowBirthdayPicker(false);
+                  if (d) setBirthday(d.toISOString().split("T")[0]);
+                }}
+              />
+            )}
+
+            <Text style={s.label}>BIO</Text>
+            <TextInput
+              style={[s.input, { minHeight: 72 }]}
+              value={bio}
+              onChangeText={setBio}
+              placeholder="A short bio or tagline"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              multiline
+            />
+          </View>
+
+          {/* Contact */}
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Contact</Text>
+
+            <Text style={s.label}>PHONE</Text>
+            <TextInput
+              style={s.input}
+              value={phone}
+              onChangeText={setPhone}
+              placeholder="Your phone number"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              keyboardType="phone-pad"
+            />
+
+            <Text style={s.label}>EMAIL</Text>
+            <TextInput
+              style={s.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Your email address"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+
+          {/* Location & work */}
+          <View style={s.card}>
+            <Text style={s.sectionTitle}>Location & Work</Text>
+
+            <Text style={s.label}>CURRENT CITY</Text>
+            <TextInput
+              style={s.input}
+              value={city}
+              onChangeText={setCity}
+              placeholder="Where are you based?"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+            />
+
+            <Text style={s.label}>HOMETOWN</Text>
+            <TextInput
+              style={s.input}
+              value={hometown}
+              onChangeText={setHometown}
+              placeholder="Where you grew up"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+            />
+
+            <Text style={s.label}>OCCUPATION</Text>
+            <TextInput
+              style={s.input}
+              value={occupation}
+              onChangeText={setOccupation}
+              placeholder="Your job or role"
+              placeholderTextColor="rgba(255,255,255,0.3)"
+            />
+          </View>
+
+          {/* Save */}
+          <TouchableOpacity style={s.saveBtn} onPress={save}>
+            <Text style={s.saveBtnText}>Save Profile</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 60 }} />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </>
   );
 }
@@ -178,12 +265,7 @@ const s = StyleSheet.create({
   scroll: { alignItems: "center", padding: 24 },
 
   avatarWrap: { position: "relative", marginBottom: 8 },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    overflow: "hidden",
-  },
+  avatar: { width: 100, height: 100, borderRadius: 50, overflow: "hidden" },
   avatarPlaceholder: {
     backgroundColor: "#2d3a5a",
     alignItems: "center",
@@ -216,7 +298,13 @@ const s = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    marginBottom: 20,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    color: "#f0f0f6",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 4,
   },
   label: {
     color: "rgba(255,255,255,0.4)",
@@ -244,10 +332,8 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
-  dateBtnText: {
-    color: "#f0f0f6",
-    fontSize: 15,
-  },
+  dateBtnText: { color: "#f0f0f6", fontSize: 15 },
+  dateBtnPlaceholder: { color: "rgba(255,255,255,0.3)", fontSize: 15 },
 
   saveBtn: {
     width: "100%",
@@ -256,9 +342,5 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
   },
-  saveBtnText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  saveBtnText: { color: "white", fontSize: 16, fontWeight: "700" },
 });

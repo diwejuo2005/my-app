@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   ScrollView,
@@ -204,6 +205,10 @@ function MemberForm({
   const scrollRef = useRef<ScrollView>(null);
 
   return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
     <ScrollView
       ref={scrollRef}
       keyboardShouldPersistTaps="handled"
@@ -375,6 +380,9 @@ function MemberForm({
           onSubmitEditing={search}
           placeholder="Search city…"
           placeholderTextColor="rgba(255,255,255,0.3)"
+          onFocus={() => {
+            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+          }}
         />
         <TouchableOpacity style={f.searchBtn} onPress={search}>
           <Text style={{ color: "white", fontWeight: "600" }}>
@@ -428,6 +436,7 @@ function MemberForm({
       </View>
       <View style={{ height: 40 }} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
