@@ -1,7 +1,92 @@
+import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts, DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
 import { Tabs, useRouter } from "expo-router";
-import { ActivityIndicator, SafeAreaView, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+function ScrollableTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  return (
+    <View
+      style={{
+        position: "absolute",
+        bottom: 24,
+        left: 20,
+        right: 20,
+        borderRadius: 30,
+        backgroundColor: "rgba(12,12,24,0.95)",
+        shadowColor: "#7c6af7",
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
+        height: 65,
+        overflow: "hidden",
+      }}
+    >
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 8,
+          height: 65,
+        }}
+      >
+        {state.routes.map((route, index) => {
+          const { options } = descriptors[route.key];
+          const isFocused = state.index === index;
+          const label = (options.title ?? route.name) as string;
+          const color = isFocused ? "#a78bfa" : "rgba(255,255,255,0.3)";
+
+          const onPress = () => {
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              onPress={onPress}
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 14,
+                height: 65,
+                gap: 3,
+              }}
+              activeOpacity={0.7}
+            >
+              {options.tabBarIcon?.({ color, size: 22, focused: isFocused })}
+              <Text
+                style={{
+                  color,
+                  fontSize: 10,
+                  fontWeight: "600",
+                  letterSpacing: 0.2,
+                }}
+              >
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
 
 export default function TabLayout() {
   const router = useRouter();
@@ -9,6 +94,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <ScrollableTabBar {...props} />}
       screenOptions={{
         header: ({ route, options }) => {
           const title = options.title ?? route.name;
@@ -73,24 +159,6 @@ export default function TabLayout() {
             </SafeAreaView>
           );
         },
-        tabBarStyle: {
-          position: "absolute",
-          bottom: 24,
-          left: 20,
-          right: 20,
-          borderRadius: 30,
-          backgroundColor: "rgba(12,12,24,0.95)",
-          borderTopWidth: 0,
-          height: 65,
-          paddingBottom: 8,
-          shadowColor: "#7c6af7",
-          shadowOpacity: 0.2,
-          shadowRadius: 20,
-          elevation: 10,
-        },
-        tabBarActiveTintColor: "#a78bfa",
-        tabBarInactiveTintColor: "rgba(255,255,255,0.3)",
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginBottom: 2 },
       }}
     >
       <Tabs.Screen
@@ -126,6 +194,33 @@ export default function TabLayout() {
           title: "People",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="people" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="calendar"
+        options={{
+          title: "Calendar",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calendar-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="moments"
+        options={{
+          title: "Moments",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="images-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="connect"
+        options={{
+          title: "Connect",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="pulse-outline" size={size} color={color} />
           ),
         }}
       />
