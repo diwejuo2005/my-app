@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -10,8 +10,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import WebView from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import { Member, useMembers } from "../../context/MembersContext";
+
+// ─── Flat-map fallback (used when globe.gl CDN is unreachable) ──────────────
 
 const { width: MAP_W, height: MAP_H } = Dimensions.get("window");
 
@@ -69,13 +72,13 @@ function MemberRow({ member }: { member: Member }) {
   );
 }
 
-export default function GlobeScreen() {
-  const { members } = useMembers();
-  const [selectedCity, setSelectedCity] = useState<{
-    city: string;
-    memberIds: number[];
-  } | null>(null);
-
+function FlatMapView({
+  members,
+  onCityPress,
+}: {
+  members: Member[];
+  onCityPress: (city: string, memberIds: number[]) => void;
+}) {
   const clusters = useMemo<Cluster[]>(() => {
     const map: Record<string, Cluster> = {};
     members.forEach((m) => {
@@ -86,45 +89,219 @@ export default function GlobeScreen() {
     return Object.values(map);
   }, [members]);
 
+  const gridLats = [-60, -30, 30, 60];
+  const gridLons = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
+
+  return (
+    <View style={s.mapArea}>
+      {gridLats.map((lat) => {
+        const { y } = latLonToXY(lat, 0);
+        return <View key={lat} style={[s.gridH, { top: y }]} />;
+      })}
+      {gridLons.map((lon) => {
+        const { x } = latLonToXY(0, lon);
+        return <View key={lon} style={[s.gridV, { left: x }]} />;
+      })}
+      <View style={[s.equator, { top: MAP_H / 2 }]} />
+
+      {clusters.map((cluster) => {
+        const { x, y } = latLonToXY(cluster.lat, cluster.lon);
+        return (
+          <View key={cluster.city} style={[s.pinAnchor, { left: x, top: y }]}>
+            <Pin
+              cluster={cluster}
+              onPress={() =>
+                onCityPress(
+                  cluster.city,
+                  cluster.members.map((m) => m.id)
+                )
+              }
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Globe HTML template ─────────────────────────────────────────────────────
+
+const GLOBE_HTML_TEMPLATE = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#07080f; overflow:hidden; }
+</style>
+</head>
+<body>
+<div id="g" style="width:100vw;height:100vh"></div>
+<script>
+var MEMBERS = __MEMBERS_DATA__;
+var started = false;
+
+var killTimer = setTimeout(function() {
+  if (!started) {
+    try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'error',msg:'timeout'})); } catch(e) {}
+  }
+}, 14000);
+
+function startGlobe() {
+  try {
+    started = true;
+    clearTimeout(killTimer);
+
+    var el = document.getElementById('g');
+    var myGlobe = Globe()(el);
+
+    myGlobe
+      .width(window.innerWidth)
+      .height(window.innerHeight)
+      .backgroundColor('#07080f')
+      .showGraticules(true)
+      .showAtmosphere(true)
+      .atmosphereColor('#6b4fb8')
+      .atmosphereAltitude(0.18);
+
+    var mat = myGlobe.globeMaterial();
+    mat.color.set('#162447');
+    mat.emissive.set('#0d1530');
+    mat.emissiveIntensity = 0.25;
+
+    // Cluster by city
+    var cityMap = {};
+    MEMBERS.forEach(function(m) {
+      if (!cityMap[m.city]) cityMap[m.city] = { lat: m.lat, lng: m.lon, city: m.city, ids: [], names: [], rels: [] };
+      cityMap[m.city].ids.push(m.id);
+      cityMap[m.city].names.push(m.name);
+      cityMap[m.city].rels.push(m.relationship);
+    });
+    var clusters = Object.values(cityMap);
+
+    myGlobe
+      .pointsData(clusters)
+      .pointLat(function(d) { return d.lat; })
+      .pointLng(function(d) { return d.lng; })
+      .pointColor(function() { return '#a78bfa'; })
+      .pointRadius(0.55)
+      .pointAltitude(0.015)
+      .onPointClick(function(d) {
+        try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city: d.city, memberIds: d.ids})); } catch(e) {}
+      });
+
+    myGlobe
+      .labelsData(clusters)
+      .labelLat(function(d) { return d.lat; })
+      .labelLng(function(d) { return d.lng; })
+      .labelText(function(d) { return d.ids.length > 1 ? d.city + ' (' + d.ids.length + ')' : d.city; })
+      .labelColor(function() { return 'rgba(240,240,246,0.9)'; })
+      .labelSize(0.45)
+      .labelDotRadius(0.35)
+      .labelAltitude(0.02);
+
+    var ctrl = myGlobe.controls();
+    ctrl.autoRotate = true;
+    ctrl.autoRotateSpeed = 0.6;
+    ctrl.enableZoom = true;
+    ctrl.minDistance = 200;
+
+    window.addEventListener('resize', function() {
+      myGlobe.width(window.innerWidth).height(window.innerHeight);
+    });
+  } catch(err) {
+    try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'error',msg:String(err)})); } catch(e) {}
+  }
+}
+
+function tryLoad(src, onOk, onFail) {
+  var s = document.createElement('script');
+  s.src = src;
+  s.onload = onOk;
+  s.onerror = onFail;
+  document.head.appendChild(s);
+}
+
+tryLoad(
+  'https://cdn.jsdelivr.net/npm/globe.gl@2/dist/globe.gl.min.js',
+  startGlobe,
+  function() {
+    tryLoad(
+      'https://unpkg.com/globe.gl@2/dist/globe.gl.min.js',
+      startGlobe,
+      function() {
+        try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'error',msg:'cdn-failed'})); } catch(e) {}
+      }
+    );
+  }
+);
+</script>
+</body>
+</html>`;
+
+// ─── Main screen ─────────────────────────────────────────────────────────────
+
+export default function GlobeScreen() {
+  const { members } = useMembers();
+  const [useFlatMap, setUseFlatMap] = useState(false);
+  const [selectedCity, setSelectedCity] = useState<{
+    city: string;
+    memberIds: number[];
+  } | null>(null);
+
   const cityMembers = selectedCity
     ? members.filter((m) => selectedCity.memberIds.includes(m.id))
     : [];
 
-  const gridLats = [-60, -30, 30, 60];
-  const gridLons = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150];
+  const html = useMemo(() => {
+    const data = JSON.stringify(
+      members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        city: m.city,
+        lat: m.lat,
+        lon: m.lon,
+        relationship: m.relationship,
+      }))
+    );
+    return GLOBE_HTML_TEMPLATE.replace("__MEMBERS_DATA__", data);
+  }, [members]);
+
+  function handleMessage(event: { nativeEvent: { data: string } }) {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === "error") {
+        setUseFlatMap(true);
+      } else if (msg.type === "pin-click") {
+        setSelectedCity({ city: msg.city, memberIds: msg.memberIds });
+      }
+    } catch {}
+  }
 
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" />
 
-      <View style={s.mapArea}>
-        {gridLats.map((lat) => {
-          const { y } = latLonToXY(lat, 0);
-          return <View key={lat} style={[s.gridH, { top: y }]} />;
-        })}
-        {gridLons.map((lon) => {
-          const { x } = latLonToXY(0, lon);
-          return <View key={lon} style={[s.gridV, { left: x }]} />;
-        })}
-        <View style={[s.equator, { top: MAP_H / 2 }]} />
-
-        {clusters.map((cluster) => {
-          const { x, y } = latLonToXY(cluster.lat, cluster.lon);
-          return (
-            <View key={cluster.city} style={[s.pinAnchor, { left: x, top: y }]}>
-              <Pin
-                cluster={cluster}
-                onPress={() =>
-                  setSelectedCity({
-                    city: cluster.city,
-                    memberIds: cluster.members.map((m) => m.id),
-                  })
-                }
-              />
-            </View>
-          );
-        })}
-      </View>
+      {useFlatMap ? (
+        <FlatMapView
+          members={members}
+          onCityPress={(city, memberIds) => setSelectedCity({ city, memberIds })}
+        />
+      ) : (
+        <WebView
+          source={{ html }}
+          style={{ flex: 1, backgroundColor: "#07080f" }}
+          onMessage={handleMessage}
+          javaScriptEnabled
+          originWhitelist={["*"]}
+          mixedContentMode="always"
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          onError={() => setUseFlatMap(true)}
+          onHttpError={() => setUseFlatMap(true)}
+        />
+      )}
 
       <Modal
         visible={selectedCity !== null}
