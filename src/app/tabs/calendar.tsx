@@ -1278,6 +1278,28 @@ export default function CalendarScreen() {
     return Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
   }, [today, weekOffset]);
 
+  // iOS 17+ distinguishes "write-only" from "full access".
+  // getEventsAsync requires full access — write-only returns 0 events silently.
+  async function hasFullCalendarAccess(): Promise<boolean> {
+    const perm = await Calendar.getCalendarPermissionsAsync();
+    if (perm.status !== "granted") return false;
+    // accessPrivileges is iOS 17+ only; if absent we have full access (pre-17)
+    const priv = (perm as any).accessPrivileges;
+    if (priv === "writeOnly") return false;
+    return true;
+  }
+
+  async function requestFullAccess(): Promise<boolean> {
+    if (Platform.OS === "ios") {
+      // requestFullCalendarAccessAsync → "Full Access" prompt on iOS 17+
+      const result = await (Calendar as any).requestFullCalendarAccessAsync?.();
+      if (result) return result.status === "granted";
+      // Fallback for older expo-calendar builds that don't expose the method
+    }
+    const { status } = await Calendar.requestCalendarPermissionsAsync();
+    return status === "granted";
+  }
+
   // On mount: load local data then check OS permission status
   useEffect(() => {
     Promise.all([
@@ -1288,8 +1310,7 @@ export default function CalendarScreen() {
       if (visRaw) setVisibility(visRaw as CalendarVisibility);
     });
 
-    Calendar.getCalendarPermissionsAsync().then(({ status }) => {
-      const granted = status === "granted";
+    hasFullCalendarAccess().then((granted) => {
       setPermissionGranted(granted);
       if (granted) syncDeviceCalendar();
     });
@@ -1312,10 +1333,12 @@ export default function CalendarScreen() {
   async function syncDeviceCalendar() {
     setSyncLoading(true);
     try {
-      // Verify OS permission is still valid before proceeding
-      const { status } = await Calendar.getCalendarPermissionsAsync();
-      if (status !== "granted") {
+      // Re-verify full access before each sync (user may have changed it in Settings)
+      const ok = await hasFullCalendarAccess();
+      if (!ok) {
         setPermissionGranted(false);
+        setDeviceEvents([]);
+        setDeviceEventCount(0);
         setSyncLoading(false);
         return;
       }
@@ -1341,8 +1364,6 @@ export default function CalendarScreen() {
       setDeviceEventCount(mapped.length);
     } catch (err) {
       console.warn("[Ensemble] Calendar sync error:", err);
-      // Don't touch permission state here — a transient error should not
-      // force the user to re-authorise.
     } finally {
       setSyncLoading(false);
     }
@@ -1351,14 +1372,14 @@ export default function CalendarScreen() {
   async function handleRequestPermission() {
     setSyncLoading(true);
     try {
-      const { status } = await Calendar.requestCalendarPermissionsAsync();
-      if (status === "granted") {
+      const granted = await requestFullAccess();
+      if (granted) {
         setPermissionGranted(true);
         await syncDeviceCalendar();
       } else {
         Alert.alert(
-          "Calendar access denied",
-          "To sync your events, go to Settings → Ensemble → Calendars and allow access."
+          "Full calendar access needed",
+          'Tap "Allow Full Access" when prompted, or go to Settings → Privacy & Security → Calendars → Ensemble and choose "Full Access".'
         );
       }
     } finally {
