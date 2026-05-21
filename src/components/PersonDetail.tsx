@@ -69,7 +69,10 @@ type CalEvent = {
   endTime: string;   // "HH:MM" 24h
   color: string;
   notes?: string;
+  source?: string;
 };
+
+type CalVisibility = 'full' | 'availability' | 'hidden';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -947,27 +950,46 @@ function EditModal({
 
 function ScheduleTab() {
   const [events, setEvents] = useState<CalEvent[]>([]);
+  const [visibility, setVisibility] = useState<CalVisibility>('full');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem('ensemble_calendar').then((raw) => {
-      if (raw) {
-        const all: CalEvent[] = JSON.parse(raw);
-        const today = new Date().toISOString().split('T')[0];
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() + 30);
-        const cutoffStr = cutoff.toISOString().split('T')[0];
-        const upcoming = all
-          .filter((e) => e.date >= today && e.date <= cutoffStr)
-          .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-        setEvents(upcoming);
-      }
+    Promise.all([
+      AsyncStorage.getItem('ensemble_calendar'),
+      AsyncStorage.getItem('ensemble_google_events'),
+      AsyncStorage.getItem('ensemble_calendar_visibility'),
+    ]).then(([localRaw, googleRaw, visRaw]) => {
+      const today = new Date().toISOString().split('T')[0];
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() + 30);
+      const cutoffStr = cutoff.toISOString().split('T')[0];
+
+      const localEvs: CalEvent[] = localRaw ? JSON.parse(localRaw) : [];
+      const googleEvs: CalEvent[] = googleRaw ? JSON.parse(googleRaw) : [];
+      const all = [...localEvs, ...googleEvs];
+      const upcoming = all
+        .filter((e) => e.date >= today && e.date <= cutoffStr)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+
+      setEvents(upcoming);
+      if (visRaw) setVisibility(visRaw as CalVisibility);
       setLoading(false);
     });
   }, []);
 
   if (loading) {
     return <ActivityIndicator color="#a78bfa" style={{ marginTop: 40 }} />;
+  }
+
+  if (visibility === 'hidden') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 }}>
+        <Ionicons name="lock-closed-outline" size={48} color="rgba(255,255,255,0.15)" />
+        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 15, textAlign: 'center' }}>
+          Schedule is set to private.
+        </Text>
+      </View>
+    );
   }
 
   if (events.length === 0) {
@@ -993,6 +1015,13 @@ function ScheduleTab() {
       contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 40 }}
       showsVerticalScrollIndicator={false}
     >
+      {visibility === 'availability' && (
+        <View style={{ backgroundColor: 'rgba(167,139,250,0.1)', borderRadius: 10, padding: 10, marginBottom: 4 }}>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, textAlign: 'center' }}>
+            Showing availability only — event details are private
+          </Text>
+        </View>
+      )}
       {dates.map((date) => {
         const d = new Date(date + 'T12:00:00');
         const label = d.toLocaleDateString('en-US', {
@@ -1024,17 +1053,17 @@ function ScheduleTab() {
                   padding: 14,
                   marginBottom: 8,
                   borderLeftWidth: 3,
-                  borderLeftColor: ev.color,
+                  borderLeftColor: visibility === 'availability' ? 'rgba(255,255,255,0.18)' : ev.color,
                 }}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: '#f0f0f6', fontSize: 15, fontWeight: '700' }}>
-                    {ev.title}
+                    {visibility === 'availability' ? 'Busy' : ev.title}
                   </Text>
                   <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 3 }}>
                     {ev.startTime} – {ev.endTime}
                   </Text>
-                  {ev.notes ? (
+                  {visibility === 'full' && ev.notes ? (
                     <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, marginTop: 4 }}>
                       {ev.notes}
                     </Text>
