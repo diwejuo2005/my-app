@@ -79,18 +79,15 @@ export default function SettingsScreen() {
   const [notifModal, setNotifModal] = useState(false);
   const [appearModal, setAppearModal] = useState(false);
   const [quietModal, setQuietModal] = useState(false);
-  const [profileModal, setProfileModal] = useState(false);
   const [privacyModal, setPrivacyModal] = useState(false);
 
   const [quietStartInput, setQuietStartInput] = useState(String(settings.quietStart));
   const [quietEndInput, setQuietEndInput] = useState(String(settings.quietEnd));
-  const [userNameInput, setUserNameInput] = useState(settings.userName);
 
   useEffect(() => {
     if (loaded) {
       setQuietStartInput(String(settings.quietStart));
       setQuietEndInput(String(settings.quietEnd));
-      setUserNameInput(settings.userName);
     }
   }, [loaded]);
 
@@ -175,12 +172,9 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Account</Text>
 
         <View style={styles.card}>
-          <TouchableOpacity style={styles.row} onPress={() => setProfileModal(true)}>
+          <TouchableOpacity style={styles.row} onPress={() => router.push('/profile')}>
             <Ionicons name="person-outline" size={20} color={accent} />
             <Text style={styles.rowLabel}>Profile</Text>
-            {settings.userName ? (
-              <Text style={styles.rowSub}>{settings.userName}</Text>
-            ) : null}
             <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
           </TouchableOpacity>
 
@@ -302,35 +296,6 @@ export default function SettingsScreen() {
               if (!isNaN(s) && s >= 0 && s <= 23) update({ quietStart: s });
               if (!isNaN(e) && e >= 0 && e <= 23) update({ quietEnd: e });
               setQuietModal(false);
-            }}
-          >
-            <Text style={styles.modalDoneText}>Save</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-
-      {/* Profile Modal */}
-      <Modal visible={profileModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Profile</Text>
-            <TouchableOpacity onPress={() => setProfileModal(false)}>
-              <Ionicons name="close" size={24} color="rgba(255,255,255,0.6)" />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.modalSectionLabel}>YOUR NAME</Text>
-          <TextInput
-            style={styles.modalInput}
-            value={userNameInput}
-            onChangeText={setUserNameInput}
-            placeholder="Enter your name"
-            placeholderTextColor="rgba(255,255,255,0.3)"
-          />
-          <TouchableOpacity
-            style={[styles.modalDoneBtn, { backgroundColor: accent }]}
-            onPress={() => {
-              update({ userName: userNameInput.trim() });
-              setProfileModal(false);
             }}
           >
             <Text style={styles.modalDoneText}>Save</Text>
