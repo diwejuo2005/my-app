@@ -190,10 +190,14 @@ function startGlobe() {
           pinInner +
           '</div>' +
           '<div style="background:rgba(10,8,30,0.75);border-radius:6px;padding:2px 7px;white-space:nowrap;color:rgba(255,255,255,0.95);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;border:1px solid rgba(124,106,247,0.4)">' + d.city + '</div>';
-        wrap.addEventListener('click', function(e) {
+        function firePin(e) {
           e.stopPropagation();
+          if (e.cancelable) e.preventDefault();
           try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city:d.city, memberIds:d.ids})); } catch(ex) {}
-        });
+        }
+        wrap.addEventListener('click', firePin);
+        wrap.addEventListener('touchstart', function(e) { e.stopPropagation(); });
+        wrap.addEventListener('touchend', firePin);
         return wrap;
       });
 

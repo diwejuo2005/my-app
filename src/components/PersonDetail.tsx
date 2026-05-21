@@ -215,24 +215,15 @@ async function fetchMemberNews(member: Member): Promise<NewsArticle[]> {
   const cityQ = member.city ? encodeURIComponent('"' + member.city + '"') : null;
   let articles: NewsArticle[] = [];
 
-  // 1. City-specific search (strictest — articles must mention the city)
+  // 1. City exact search — only articles that explicitly mention the city
   if (cityQ) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?q=${cityQ}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`));
 
-  // 2. Country tag filtered by city keyword
+  // 2. Country tag + city keyword (still city-specific, within the country section)
   const tag = COUNTRY_TAG[member.country];
   if (articles.length < 5 && tag && cityQ) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&q=${cityQ}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
 
-  // 3. Country tag alone (broader country news as fallback)
+  // 3. Country tag alone — same country, no city filter (closest fallback)
   if (articles.length < 5 && tag) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
-
-  // 4. Region fallback
-  if (articles.length < 5) {
-    const region = REGION_TAGS[member.country];
-    if (region) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${region}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
-  }
-
-  // 5. World news as last resort
-  if (articles.length < 5) merge(articles, await guardianFetch('https://content.guardianapis.com/world?api-key=test&show-fields=trailText&page-size=10&order-by=newest'));
 
   return sort(articles).slice(0, 20);
 }
@@ -568,7 +559,13 @@ function ConnectionLineGraph({ scores }: { scores: Record<string, number> }) {
   }));
 
   return (
-    <View style={{ height: GRAPH_H + 20, position: 'relative' }}>
+    <View style={{ height: GRAPH_H + 32, position: 'relative' }}>
+      {/* Y-axis title */}
+      <Text style={{ position: 'absolute', left: -18, top: GRAPH_H / 2 - 18, width: 36, textAlign: 'center', color: 'rgba(255,255,255,0.25)', fontSize: 7, fontWeight: '700', letterSpacing: 0.5, transform: [{ rotate: '-90deg' }] }}>
+        MOOD
+      </Text>
+
+      {/* Y-axis grid + labels */}
       {[5, 4, 3, 2, 1].map((s) => (
         <View key={s}>
           <View style={{ position: 'absolute', left: LEFT, top: yOf(s), right: RIGHT, height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.08)' }} />
@@ -578,18 +575,23 @@ function ConnectionLineGraph({ scores }: { scores: Record<string, number> }) {
         </View>
       ))}
 
+      {/* Continuous line across all 7 days */}
       {pts.map((p, i) => {
-        if (i === 0 || p.y === null || pts[i - 1].y === null) return null;
+        if (i === 0) return null;
         const prev = pts[i - 1];
+        const y1 = prev.y ?? yOf(3);
+        const y2 = p.y ?? yOf(3);
         const dx = p.x - prev.x;
-        const dy = p.y - prev.y!;
+        const dy = y2 - y1;
         const len = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        const bothScored = prev.y !== null && p.y !== null;
         return (
-          <View key={p.day + '-line'} style={{ position: 'absolute', left: (prev.x + p.x) / 2 - len / 2, top: (prev.y! + p.y) / 2 - 1, width: len, height: 2, backgroundColor: '#a78bfa', borderRadius: 1, transform: [{ rotate: `${angle}deg` }] }} />
+          <View key={p.day + '-line'} style={{ position: 'absolute', left: (prev.x + p.x) / 2 - len / 2, top: (y1 + y2) / 2 - 1, width: len, height: bothScored ? 2 : 1, backgroundColor: bothScored ? '#a78bfa' : 'rgba(167,139,250,0.2)', borderRadius: 1, transform: [{ rotate: `${angle}deg` }] }} />
         );
       })}
 
+      {/* Points + day labels */}
       {pts.map((p) => (
         <View key={p.day}>
           {p.y != null ? (
@@ -602,6 +604,11 @@ function ConnectionLineGraph({ scores }: { scores: Record<string, number> }) {
           </Text>
         </View>
       ))}
+
+      {/* X-axis title */}
+      <Text style={{ position: 'absolute', left: LEFT, right: RIGHT, top: GRAPH_H + 18, textAlign: 'center', color: 'rgba(255,255,255,0.2)', fontSize: 7, fontWeight: '700', letterSpacing: 0.5 }}>
+        DAY OF WEEK
+      </Text>
     </View>
   );
 }

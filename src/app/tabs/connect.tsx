@@ -104,7 +104,12 @@ function WeekLineGraph({
   }));
 
   return (
-    <View style={{ height: GRAPH_H + 20, position: "relative" }}>
+    <View style={{ height: GRAPH_H + 32, position: "relative" }}>
+      {/* Y-axis title */}
+      <Text style={{ position: "absolute", left: -18, top: GRAPH_H / 2 - 18, width: 36, textAlign: "center", color: "rgba(255,255,255,0.25)", fontSize: 7, fontWeight: "700", letterSpacing: 0.5, transform: [{ rotate: "-90deg" }] }}>
+        MOOD
+      </Text>
+
       {/* Y-axis grid + labels */}
       {[5, 4, 3, 2, 1].map((s) => (
         <View key={s}>
@@ -115,16 +120,19 @@ function WeekLineGraph({
         </View>
       ))}
 
-      {/* Lines between consecutive scored points */}
+      {/* Continuous line across all 7 days (solid between scored, faint otherwise) */}
       {pts.map((p, i) => {
-        if (i === 0 || p.y === null || pts[i - 1].y === null) return null;
+        if (i === 0) return null;
         const prev = pts[i - 1];
+        const y1 = prev.y ?? yOf(3);
+        const y2 = p.y ?? yOf(3);
         const dx = p.x - prev.x;
-        const dy = p.y - prev.y!;
+        const dy = y2 - y1;
         const len = Math.sqrt(dx * dx + dy * dy);
         const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+        const bothScored = prev.y !== null && p.y !== null;
         return (
-          <View key={p.day + "-line"} style={{ position: "absolute", left: (prev.x + p.x) / 2 - len / 2, top: (prev.y! + p.y) / 2 - 1, width: len, height: 2, backgroundColor: "#a78bfa", borderRadius: 1, transform: [{ rotate: `${angle}deg` }] }} />
+          <View key={p.day + "-line"} style={{ position: "absolute", left: (prev.x + p.x) / 2 - len / 2, top: (y1 + y2) / 2 - 1, width: len, height: bothScored ? 2 : 1, backgroundColor: bothScored ? "#a78bfa" : "rgba(167,139,250,0.2)", borderRadius: 1, transform: [{ rotate: `${angle}deg` }] }} />
         );
       })}
 
@@ -147,6 +155,11 @@ function WeekLineGraph({
           </Text>
         </View>
       ))}
+
+      {/* X-axis title */}
+      <Text style={{ position: "absolute", left: LEFT, right: RIGHT, top: GRAPH_H + 18, textAlign: "center", color: "rgba(255,255,255,0.2)", fontSize: 7, fontWeight: "700", letterSpacing: 0.5 }}>
+        DAY OF WEEK
+      </Text>
     </View>
   );
 }
