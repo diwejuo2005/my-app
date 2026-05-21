@@ -1,7 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Google from "expo-auth-session/providers/google";
+import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Modal,
@@ -16,9 +19,13 @@ import {
   View,
 } from "react-native";
 
+WebBrowser.maybeCompleteAuthSession();
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+type CalendarVisibility = "full" | "availability" | "hidden";
 
 type CalendarEvent = {
   id: string;
@@ -28,6 +35,7 @@ type CalendarEvent = {
   endTime: string; // "HH:MM" 24h
   color: string;
   notes?: string;
+  source?: "google"; // undefined = local
 };
 
 // ---------------------------------------------------------------------------
@@ -35,6 +43,14 @@ type CalendarEvent = {
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = "ensemble_calendar";
+const VISIBILITY_KEY = "ensemble_calendar_visibility";
+const GOOGLE_TOKEN_KEY = "ensemble_google_token";
+const GOOGLE_EVENTS_KEY = "ensemble_google_events";
+
+// ⚠️  Replace with your actual Web Client ID from Google Cloud Console.
+// Scopes needed: https://www.googleapis.com/auth/calendar.readonly
+// Authorized redirect URI in Cloud Console must include your Expo redirect URI.
+const GOOGLE_CLIENT_ID = "YOUR_GOOGLE_WEB_CLIENT_ID.apps.googleusercontent.com";
 const EVENT_COLORS = [
   "#7c6af7",
   "#f472b6",
@@ -1141,6 +1157,338 @@ const tg = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
+// Visibility options metadata
+// ---------------------------------------------------------------------------
+
+const VISIBILITY_OPTIONS: Array<{
+  key: CalendarVisibility;
+  title: string;
+  desc: string;
+  icon: string;
+}> = [
+  {
+    key: "full",
+    title: "Full details",
+    desc: "Connections can see all event titles, times, and notes",
+    icon: "calendar",
+  },
+  {
+    key: "availability",
+    title: "Availability only",
+    desc: "Connections see when you're busy or free — no event titles",
+    icon: "time-outline",
+  },
+  {
+    key: "hidden",
+    title: "Private",
+    desc: "Connections cannot view your schedule at all",
+    icon: "eye-off-outline",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Visibility Settings Modal
+// ---------------------------------------------------------------------------
+
+function VisibilitySettingsModal({
+  visible,
+  value,
+  onChange,
+  onClose,
+}: {
+  visible: boolean;
+  value: CalendarVisibility;
+  onChange: (v: CalendarVisibility) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <Pressable style={vm.overlay} onPress={onClose}>
+        <Pressable style={vm.sheet} onPress={() => {}}>
+          <View style={vm.handle} />
+          <Text style={vm.title}>Calendar Visibility</Text>
+          <Text style={vm.subtitle}>
+            Choose what connections see when they view your schedule
+          </Text>
+          {VISIBILITY_OPTIONS.map((opt) => {
+            const selected = value === opt.key;
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[vm.option, selected && vm.optionSelected]}
+                onPress={() => {
+                  onChange(opt.key);
+                  onClose();
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[vm.iconWrap, selected && vm.iconWrapSelected]}>
+                  <Ionicons
+                    name={opt.icon as any}
+                    size={20}
+                    color={selected ? "#fff" : "rgba(255,255,255,0.5)"}
+                  />
+                </View>
+                <View style={vm.optText}>
+                  <Text style={[vm.optTitle, selected && vm.optTitleSelected]}>
+                    {opt.title}
+                  </Text>
+                  <Text style={vm.optDesc}>{opt.desc}</Text>
+                </View>
+                {selected && (
+                  <Ionicons name="checkmark-circle" size={20} color={ACCENT} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity style={vm.doneBtn} onPress={onClose}>
+            <Text style={vm.doneTxt}>Done</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const vm = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#0e0f1e",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    paddingBottom: Platform.OS === "ios" ? 36 : 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  title: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 6,
+  },
+  subtitle: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 13,
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  option: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 10,
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+  optionSelected: {
+    backgroundColor: "rgba(167,139,250,0.1)",
+    borderColor: ACCENT,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconWrapSelected: { backgroundColor: ACCENT },
+  optText: { flex: 1 },
+  optTitle: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  optTitleSelected: { color: "#fff" },
+  optDesc: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  doneBtn: {
+    marginTop: 8,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+  },
+  doneTxt: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Google Sync Banner
+// ---------------------------------------------------------------------------
+
+const VIS_LABEL: Record<CalendarVisibility, string> = {
+  full: "Full details",
+  availability: "Availability only",
+  hidden: "Private",
+};
+
+type SyncBannerProps = {
+  connected: boolean;
+  loading: boolean;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onRefresh: () => void;
+  visibility: CalendarVisibility;
+  onVisibilityPress: () => void;
+  canConnect: boolean;
+};
+
+function GoogleSyncBanner({
+  connected,
+  loading,
+  onConnect,
+  onDisconnect,
+  onRefresh,
+  visibility,
+  onVisibilityPress,
+  canConnect,
+}: SyncBannerProps) {
+  return (
+    <View style={gsb.bar}>
+      <TouchableOpacity
+        style={gsb.left}
+        onPress={connected ? onDisconnect : onConnect}
+        disabled={loading || (!connected && !canConnect)}
+        activeOpacity={0.7}
+      >
+        <View style={gsb.gIcon}>
+          <Text style={gsb.gLetter}>G</Text>
+        </View>
+        {connected ? (
+          <>
+            <View style={gsb.dot} />
+            <Text style={gsb.connTxt}>Google synced</Text>
+          </>
+        ) : (
+          <Text style={gsb.disconnTxt}>Connect Google Calendar</Text>
+        )}
+        {loading && (
+          <ActivityIndicator
+            size="small"
+            color={ACCENT}
+            style={{ marginLeft: 6 }}
+          />
+        )}
+        {connected && !loading && (
+          <TouchableOpacity
+            onPress={onRefresh}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={{ marginLeft: 4 }}
+          >
+            <Ionicons
+              name="refresh-outline"
+              size={14}
+              color="rgba(255,255,255,0.4)"
+            />
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={gsb.visBtn} onPress={onVisibilityPress}>
+        <Ionicons
+          name={
+            visibility === "hidden"
+              ? "eye-off-outline"
+              : visibility === "availability"
+              ? "time-outline"
+              : "eye-outline"
+          }
+          size={13}
+          color={ACCENT}
+        />
+        <Text style={gsb.visTxt}>{VIS_LABEL[visibility]}</Text>
+        <Ionicons
+          name="chevron-forward"
+          size={11}
+          color="rgba(167,139,250,0.6)"
+        />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const gsb = StyleSheet.create({
+  bar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  left: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  gIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  gLetter: { color: "#4285F4", fontSize: 11, fontWeight: "800" },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#34d399",
+  },
+  connTxt: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  disconnTxt: {
+    color: "rgba(255,255,255,0.45)",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  visBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: "rgba(167,139,250,0.1)",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  visTxt: {
+    color: ACCENT,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
 
@@ -1151,20 +1499,171 @@ export default function CalendarScreen() {
   const [modalMode, setModalMode] = useState<ModalMode>("add");
   const [modalInitial, setModalInitial] = useState<Partial<CalendarEvent>>({});
 
+  // Google Calendar state
+  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [googleEvents, setGoogleEvents] = useState<CalendarEvent[]>([]);
+  const [visibility, setVisibility] = useState<CalendarVisibility>("full");
+  const [showVisibility, setShowVisibility] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
+
+  // Google OAuth hook — requires a valid webClientId to be set above
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: GOOGLE_CLIENT_ID,
+    scopes: ["https://www.googleapis.com/auth/calendar.readonly"],
+  });
+
   const today = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => toDateString(today), [today]);
 
-  // Compute the 7 days of the currently displayed week
   const weekDays = useMemo<Date[]>(() => {
     const base = startOfWeek(today);
     const shifted = addDays(base, weekOffset * 7);
     return Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
   }, [today, weekOffset]);
 
-  // Load events from storage
+  // Load persisted data on mount
   useEffect(() => {
-    loadEvents().then(setEvents);
+    Promise.all([
+      loadEvents(),
+      AsyncStorage.getItem(GOOGLE_TOKEN_KEY),
+      AsyncStorage.getItem(VISIBILITY_KEY),
+      AsyncStorage.getItem(GOOGLE_EVENTS_KEY),
+    ]).then(([localEvs, tokenRaw, visRaw, gEvRaw]) => {
+      setEvents(localEvs);
+      if (tokenRaw) setGoogleToken(JSON.parse(tokenRaw));
+      if (visRaw) setVisibility(visRaw as CalendarVisibility);
+      if (gEvRaw) setGoogleEvents(JSON.parse(gEvRaw));
+    });
   }, []);
+
+  // Handle OAuth response
+  useEffect(() => {
+    if (!response) return;
+    if (response.type === "success" && response.authentication?.accessToken) {
+      const token = response.authentication.accessToken;
+      setGoogleToken(token);
+      AsyncStorage.setItem(GOOGLE_TOKEN_KEY, JSON.stringify(token));
+      fetchGoogleEvents(token);
+    } else if (response.type === "error") {
+      Alert.alert(
+        "Sign-in failed",
+        response.error?.message ?? "Could not sign in with Google."
+      );
+    }
+  }, [response]);
+
+  async function fetchGoogleEvents(accessToken: string) {
+    setSyncLoading(true);
+    try {
+      const now = new Date();
+      const future = new Date(now);
+      future.setMonth(future.getMonth() + 3);
+      const res = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(future.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=250`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const data = await res.json();
+
+      if (data.error) {
+        if (data.error.code === 401) {
+          setGoogleToken(null);
+          AsyncStorage.removeItem(GOOGLE_TOKEN_KEY);
+          Alert.alert("Session expired", "Please reconnect Google Calendar.");
+        } else {
+          Alert.alert("Sync failed", data.error.message ?? "Unknown error");
+        }
+        return;
+      }
+
+      const converted: CalendarEvent[] = (data.items ?? [])
+        .filter((item: any) => item.start?.dateTime || item.start?.date)
+        .map((item: any): CalendarEvent => {
+          let date = item.start?.date ?? toDateString(new Date());
+          let startTime = "08:00";
+          let endTime = "09:00";
+
+          if (item.start?.dateTime) {
+            const start = new Date(item.start.dateTime);
+            const end = new Date(item.end?.dateTime ?? item.start.dateTime);
+            date = toDateString(start);
+            const sh = String(start.getHours()).padStart(2, "0");
+            const sm = String(start.getMinutes()).padStart(2, "0");
+            const eh = String(end.getHours()).padStart(2, "0");
+            const em2 = String(end.getMinutes()).padStart(2, "0");
+            startTime = `${sh}:${sm}`;
+            endTime = `${eh}:${em2}`;
+            // Clamp to grid
+            if (startTime < `${String(GRID_START_HOUR).padStart(2, "0")}:00`)
+              startTime = `${String(GRID_START_HOUR).padStart(2, "0")}:00`;
+            if (endTime > `${String(GRID_END_HOUR).padStart(2, "0")}:59`)
+              endTime = `${String(GRID_END_HOUR).padStart(2, "0")}:00`;
+            if (endTime <= startTime)
+              endTime = `${String(Math.min(GRID_END_HOUR, parseInt(sh, 10) + 1)).padStart(2, "0")}:00`;
+          }
+
+          return {
+            id: `goog-${item.id}`,
+            title: item.summary ?? "(no title)",
+            date,
+            startTime,
+            endTime,
+            color: "#4285F4",
+            notes: item.description,
+            source: "google",
+          };
+        });
+
+      setGoogleEvents(converted);
+      AsyncStorage.setItem(GOOGLE_EVENTS_KEY, JSON.stringify(converted));
+    } catch {
+      Alert.alert(
+        "Sync failed",
+        "Could not fetch Google Calendar events. Check your connection."
+      );
+    } finally {
+      setSyncLoading(false);
+    }
+  }
+
+  function handleConnect() {
+    if (GOOGLE_CLIENT_ID.startsWith("YOUR_")) {
+      Alert.alert(
+        "Setup required",
+        "To use Google Calendar sync, add your Google Web Client ID to the GOOGLE_CLIENT_ID constant in calendar.tsx.\n\n1. Go to console.cloud.google.com\n2. Create an OAuth 2.0 Web Client ID\n3. Enable the Google Calendar API\n4. Paste the client ID into the app"
+      );
+      return;
+    }
+    promptAsync();
+  }
+
+  function handleDisconnect() {
+    Alert.alert(
+      "Disconnect Google Calendar?",
+      "Synced events will be removed from your calendar view.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: () => {
+            setGoogleToken(null);
+            setGoogleEvents([]);
+            AsyncStorage.multiRemove([GOOGLE_TOKEN_KEY, GOOGLE_EVENTS_KEY]);
+          },
+        },
+      ]
+    );
+  }
+
+  function handleVisibilityChange(v: CalendarVisibility) {
+    setVisibility(v);
+    AsyncStorage.setItem(VISIBILITY_KEY, v);
+  }
+
+  const allEvents = useMemo(
+    () => [...events, ...googleEvents],
+    [events, googleEvents]
+  );
 
   async function persistEvents(updated: CalendarEvent[]) {
     setEvents(updated);
@@ -1205,6 +1704,14 @@ export default function CalendarScreen() {
   }
 
   function openEditModal(ev: CalendarEvent) {
+    if (ev.source === "google") {
+      Alert.alert(
+        ev.title,
+        `Date: ${ev.date}\nTime: ${formatTime12(ev.startTime)} – ${formatTime12(ev.endTime)}${ev.notes ? `\n\n${ev.notes}` : ""}`,
+        [{ text: "Close", style: "cancel" }]
+      );
+      return;
+    }
     setModalMode("edit");
     setModalInitial(ev);
     setModalVisible(true);
@@ -1221,9 +1728,20 @@ export default function CalendarScreen() {
         onNext={() => setWeekOffset((o) => o + 1)}
       />
 
+      <GoogleSyncBanner
+        connected={!!googleToken}
+        loading={syncLoading}
+        onConnect={handleConnect}
+        onDisconnect={handleDisconnect}
+        onRefresh={() => googleToken && fetchGoogleEvents(googleToken)}
+        visibility={visibility}
+        onVisibilityPress={() => setShowVisibility(true)}
+        canConnect={!!request}
+      />
+
       <TimeGrid
         weekDays={weekDays}
-        events={events}
+        events={allEvents}
         onPressSlot={openAddModal}
         onPressEvent={openEditModal}
       />
@@ -1235,6 +1753,13 @@ export default function CalendarScreen() {
         onSave={handleSave}
         onDelete={handleDelete}
         onCancel={() => setModalVisible(false)}
+      />
+
+      <VisibilitySettingsModal
+        visible={showVisibility}
+        value={visibility}
+        onChange={handleVisibilityChange}
+        onClose={() => setShowVisibility(false)}
       />
     </View>
   );
