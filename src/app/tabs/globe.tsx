@@ -67,43 +67,57 @@ export default function GlobeScreen() {
     .htmlLat('lat')
     .htmlLng('lon')
     .htmlElement(d => {
+      const colors = ['#2d3a5a','#2d4a3e','#3a2d4a','#4a3a2d','#2d4a4a'];
+
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;';
+      wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;cursor:pointer;';
 
-      const circle = document.createElement('div');
-      const isCluster = d.members.length > 1;
-      circle.style.cssText = 'width:40px;height:40px;border-radius:50%;background:' + (isCluster ? '#7c6af7' : colors[d.members[0].id % colors.length]) + ';border:2px solid rgba(167,139,250,0.8);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;';
+      // Pin head (circle)
+      const head = document.createElement('div');
+      const isMulti = d.members.length > 1;
+      head.style.cssText = [
+        'width:34px;height:34px;border-radius:50%;',
+        'background:', isMulti ? '#7c6af7' : colors[d.members[0].id % 5], ';',
+        'border:2.5px solid rgba(255,255,255,0.85);',
+        'display:flex;align-items:center;justify-content:center;',
+        'box-shadow:0 2px 8px rgba(0,0,0,0.5);',
+        'overflow:hidden;'
+      ].join('');
 
-      if (isCluster) {
-        circle.innerHTML = '<span style="color:white;font-weight:800;font-size:15px;">' + d.members.length + '</span>';
+      if (isMulti) {
+        head.innerHTML = '<span style="color:white;font-weight:800;font-size:13px;">' + d.members.length + '</span>';
       } else {
         const m = d.members[0];
         if (m.photoUri) {
-          const img = document.createElement('img');
-          img.src = m.photoUri;
-          img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-          img.onerror = () => { circle.innerHTML = '<span style="color:white;font-weight:700;font-size:15px;">' + m.name[0].toUpperCase() + '</span>'; };
-          circle.appendChild(img);
+          head.innerHTML = '<img src="' + m.photoUri + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentNode.innerHTML=\'<span style=color:white;font-weight:700;font-size:14px>\' + m.name[0].toUpperCase() + \'</span>\'">';
         } else {
-          circle.innerHTML = '<span style="color:white;font-weight:700;font-size:15px;">' + m.name[0].toUpperCase() + '</span>';
+          head.innerHTML = '<span style="color:white;font-weight:700;font-size:14px;">' + m.name[0].toUpperCase() + '</span>';
         }
       }
 
-      // Location pin dot below circle
-      const pin = document.createElement('div');
-      pin.style.cssText = 'width:8px;height:8px;background:#a78bfa;border-radius:50%;margin-top:-4px;';
+      // Pin tail (downward triangle)
+      const tail = document.createElement('div');
+      tail.style.cssText = [
+        'width:0;height:0;',
+        'border-left:7px solid transparent;',
+        'border-right:7px solid transparent;',
+        'border-top:11px solid ', isMulti ? '#7c6af7' : colors[d.members[0].id % 5], ';',
+        'margin-top:-1px;',
+        'filter:drop-shadow(0 2px 4px rgba(0,0,0,0.4));'
+      ].join('');
 
+      // City label
       const label = document.createElement('div');
-      label.style.cssText = 'color:white;font-size:9px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.9);white-space:nowrap;max-width:80px;text-align:center;overflow:hidden;text-overflow:ellipsis;';
+      label.style.cssText = 'color:white;font-size:9px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,0.9);white-space:nowrap;max-width:90px;text-align:center;overflow:hidden;text-overflow:ellipsis;margin-top:3px;';
       label.textContent = d.city;
 
-      wrap.onclick = () => {
-        const ids = d.members.map(m => m.id);
+      wrap.onclick = function() {
+        const ids = d.members.map(function(m) { return m.id; });
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'pinClick', memberIds: ids, city: d.city }));
       };
 
-      wrap.appendChild(circle);
-      wrap.appendChild(pin);
+      wrap.appendChild(head);
+      wrap.appendChild(tail);
       wrap.appendChild(label);
       return wrap;
     });

@@ -2,7 +2,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
-  Image,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -13,18 +12,14 @@ import {
   View,
 } from "react-native";
 import * as Notifications from "expo-notifications";
-import { Member, useMembers } from "../../context/MembersContext";
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
 const MY_MOOD_KEY = "ensemble_my_mood";
 const MY_NOTES_KEY = "ensemble_my_notes";
 const REMINDER_KEY = "ensemble_mood_reminder";
-const PULSE_KEY = "ensemble_pulse";
-
 type MoodMap = Record<string, number>; // YYYY-MM-DD → 1-5
 type NotesMap = Record<string, string>; // weekStartISO → string
-type PulseMap = Record<string, Record<string, number>>; // memberId → {YYYY-MM-DD: 1-5}
 
 // ─── Descriptor labels ────────────────────────────────────────────────────────
 
@@ -35,14 +30,6 @@ const MOOD_LABELS: Record<number, string> = {
   4: "Good",
   5: "Thriving",
 };
-
-// ─── Avatar colors ────────────────────────────────────────────────────────────
-
-const AVATAR_COLORS = ["#2d3a5a", "#2d4a3e", "#3a2d4a", "#4a3a2d", "#2d4a4a"];
-
-function getAvatarColor(id: number) {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length];
-}
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -78,30 +65,6 @@ function barColor(score: number | undefined): string {
   if (score <= 2) return "#f87171";
   if (score === 3) return "#fbbf24";
   return "#34d399";
-}
-
-// ─── Avatar component ─────────────────────────────────────────────────────────
-
-function MemberAvatar({ member, size = 44 }: { member: Member; size?: number }) {
-  const radius = size / 2;
-  const style = {
-    width: size,
-    height: size,
-    borderRadius: radius,
-    overflow: "hidden" as const,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-  };
-  if (member.photoUri) {
-    return <Image source={{ uri: member.photoUri }} style={style} />;
-  }
-  return (
-    <View style={[style, { backgroundColor: getAvatarColor(member.id) }]}>
-      <Text style={{ color: "white", fontWeight: "700", fontSize: size * 0.4 }}>
-        {member.name[0]?.toUpperCase() ?? "?"}
-      </Text>
-    </View>
-  );
 }
 
 // ─── Week bar graph ───────────────────────────────────────────────────────────
@@ -440,221 +403,13 @@ const mood = StyleSheet.create({
   },
 });
 
-// ─── Tab 2: People — member list + detail view ────────────────────────────────
-
-function PeopleTab() {
-  const { members } = useMembers();
-  const [pulseMap, setPulseMap] = useState<PulseMap>({});
-  const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [memberNotesMap, setMemberNotesMap] = useState<Record<string, string>>({});
-  const [noteText, setNoteText] = useState("");
-
-  const days = currentWeekDays();
-
-  useEffect(() => {
-    AsyncStorage.getItem(PULSE_KEY).then((val) => {
-      if (val) {
-        try { setPulseMap(JSON.parse(val)); } catch {}
-      }
-    });
-  }, []);
-
-  async function openMember(m: Member) {
-    const noteKey = `ensemble_pulse_notes_${m.id}`;
-    const val = await AsyncStorage.getItem(noteKey);
-    setNoteText(val ?? "");
-    setMemberNotesMap((prev) => ({ ...prev, [m.id]: val ?? "" }));
-    setSelectedMember(m);
-  }
-
-  async function saveNote(m: Member) {
-    const noteKey = `ensemble_pulse_notes_${m.id}`;
-    await AsyncStorage.setItem(noteKey, noteText);
-    setMemberNotesMap((prev) => ({ ...prev, [m.id]: noteText }));
-  }
-
-  function daysLoggedThisWeek(scores: Record<string, number>): number {
-    return days.filter((d) => scores[d] !== undefined).length;
-  }
-
-  if (selectedMember) {
-    const scores = pulseMap[selectedMember.id.toString()] || {};
-    return (
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 20 }}
-      >
-        {/* Back button */}
-        <TouchableOpacity
-          style={people.backBtn}
-          onPress={() => setSelectedMember(null)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="chevron-back" size={18} color="#a78bfa" />
-          <Text style={people.backText}>All people</Text>
-        </TouchableOpacity>
-
-        {/* Member header */}
-        <View style={[people.card, { flexDirection: "row", alignItems: "center", gap: 14 }]}>
-          <MemberAvatar member={selectedMember} size={52} />
-          <View>
-            <Text style={people.memberName}>{selectedMember.name}</Text>
-            <Text style={people.memberRel}>{selectedMember.relationship}</Text>
-          </View>
-        </View>
-
-        {/* This week's graph */}
-        <View style={people.card}>
-          <Text style={people.sectionTitle}>This week's pulse</Text>
-          <WeekBarGraph scores={scores} highlightToday={false} />
-          <StatsRow scores={scores} />
-        </View>
-
-        {/* Notes for this person */}
-        <View style={people.card}>
-          <Text style={people.sectionTitle}>Your notes for {selectedMember.name}</Text>
-          <TextInput
-            style={people.noteInput}
-            multiline
-            placeholder={`Notes about ${selectedMember.name}...`}
-            placeholderTextColor="rgba(255,255,255,0.25)"
-            value={noteText}
-            onChangeText={setNoteText}
-            onBlur={() => saveNote(selectedMember)}
-          />
-        </View>
-      </ScrollView>
-    );
-  }
-
-  return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 12 }}
-    >
-      {members.map((m) => {
-        const scores = pulseMap[m.id.toString()] || {};
-        const logged = daysLoggedThisWeek(scores);
-        return (
-          <TouchableOpacity
-            key={m.id}
-            style={people.card}
-            onPress={() => openMember(m)}
-            activeOpacity={0.75}
-          >
-            <View style={people.row}>
-              <MemberAvatar member={m} size={46} />
-              <View style={{ flex: 1 }}>
-                <Text style={people.memberName}>{m.name}</Text>
-                <Text style={people.memberRel}>{m.relationship}</Text>
-              </View>
-              <View style={people.badge}>
-                <Text style={people.badgeText}>{logged} days</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.3)" />
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-  );
-}
-
-const people = StyleSheet.create({
-  card: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
-    gap: 14,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  memberName: {
-    color: "#f0f0f6",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  memberRel: {
-    color: "rgba(255,255,255,0.4)",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  badge: {
-    backgroundColor: "rgba(167,139,250,0.15)",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: "rgba(167,139,250,0.25)",
-  },
-  badgeText: {
-    color: "#a78bfa",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    alignSelf: "flex-start",
-  },
-  backText: {
-    color: "#a78bfa",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  sectionTitle: {
-    color: "#f0f0f6",
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  noteInput: {
-    color: "#f0f0f6",
-    fontSize: 14,
-    lineHeight: 20,
-    minHeight: 80,
-    textAlignVertical: "top",
-    paddingTop: 0,
-  },
-});
-
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ConnectScreen() {
-  const [activeTab, setActiveTab] = useState<"mood" | "people">("mood");
-
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" />
-
-      {/* Top toggle */}
-      <View style={s.toggle}>
-        <TouchableOpacity
-          onPress={() => setActiveTab("mood")}
-          style={[s.tabBtn, activeTab === "mood" && s.tabBtnActive]}
-          activeOpacity={0.8}
-        >
-          <Text style={[s.tabText, activeTab === "mood" && s.tabTextActive]}>
-            My Mood
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => setActiveTab("people")}
-          style={[s.tabBtn, activeTab === "people" && s.tabBtnActive]}
-          activeOpacity={0.8}
-        >
-          <Text style={[s.tabText, activeTab === "people" && s.tabTextActive]}>
-            People
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {activeTab === "mood" ? <MyMoodTab /> : <PeopleTab />}
+      <MyMoodTab />
     </View>
   );
 }
@@ -665,30 +420,5 @@ const s = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: "#07080f",
-  },
-  toggle: {
-    flexDirection: "row",
-    margin: 16,
-    marginBottom: 8,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 20,
-    padding: 3,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: 18,
-  },
-  tabBtnActive: {
-    backgroundColor: "#7c6af7",
-  },
-  tabText: {
-    color: "rgba(255,255,255,0.5)",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  tabTextActive: {
-    color: "white",
   },
 });

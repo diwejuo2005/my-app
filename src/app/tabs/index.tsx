@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { Member, useMembers } from "../../context/MembersContext";
 import { notifyBirthday } from "../../lib/notifications";
+import PersonDetail from "../../components/PersonDetail";
 
 const GRADIENTS: Record<string, [string, string]> = {
   night: ["#060810", "#0c0e1a"],
@@ -164,7 +165,7 @@ function useWeather(member: Member) {
   return weather;
 }
 
-function FamilyCard({ member, tick }: { member: Member; tick: number }) {
+function FamilyCard({ member, tick, onView }: { member: Member; tick: number; onView: () => void }) {
   const weather = useWeather(member);
   const [zoom, setZoom] = useState(false);
   const tod = getTimeOfDay(member.timezone);
@@ -262,6 +263,14 @@ function FamilyCard({ member, tick }: { member: Member; tick: number }) {
         <Text style={s.callLabel}>{call.label}</Text>
       </View>
 
+      <TouchableOpacity
+        style={{ marginTop: 10, backgroundColor: 'rgba(167,139,250,0.15)', borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(167,139,250,0.3)' }}
+        onPress={onView}
+        activeOpacity={0.75}
+      >
+        <Text style={{ color: '#a78bfa', fontWeight: '700', fontSize: 13 }}>View Profile</Text>
+      </TouchableOpacity>
+
       <Modal visible={zoom} transparent animationType="fade">
         <TouchableOpacity
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}
@@ -280,10 +289,11 @@ function FamilyCard({ member, tick }: { member: Member; tick: number }) {
 }
 
 export default function HomeScreen() {
-  const { members } = useMembers();
+  const { members, updateMember, removeMember } = useMembers();
   const router = useRouter();
   const [tick, setTick] = useState(0);
   const [userProfile, setUserProfile] = useState<{ name: string; photoUri?: string } | null>(null);
+  const [viewingMember, setViewingMember] = useState<Member | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -375,11 +385,20 @@ export default function HomeScreen() {
             </View>
           </View>
           {members.map((m) => (
-            <FamilyCard key={m.id} member={m} tick={tick} />
+            <FamilyCard key={m.id} member={m} tick={tick} onView={() => setViewingMember(m)} />
           ))}
           <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
+      {viewingMember && (
+        <PersonDetail
+          member={viewingMember}
+          visible={!!viewingMember}
+          onClose={() => setViewingMember(null)}
+          onUpdate={(updated) => { updateMember(updated); setViewingMember(updated); }}
+          onDelete={(id) => { removeMember(id); setViewingMember(null); }}
+        />
+      )}
     </View>
   );
 }
