@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from "expo-image-picker";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -173,6 +173,7 @@ function MemberForm({
       const results = await searchCities(cityQuery);
       setSearchResults(results);
       setHasSearched(true);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     } catch {
       setSearchResults([]);
       setHasSearched(true);
@@ -200,12 +201,15 @@ function MemberForm({
 
   const initials = name.trim() ? name.trim()[0].toUpperCase() : "?";
   const avatarColor = initial ? getAvatarColor(initial.id) : "#2d3a5a";
+  const scrollRef = useRef<ScrollView>(null);
 
   return (
     <ScrollView
+      ref={scrollRef}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       style={f.modal}
+      contentContainerStyle={{ paddingBottom: 60 }}
     >
       <Text style={f.title}>{initial ? "Edit Profile" : "Add Person"}</Text>
 
@@ -390,7 +394,7 @@ function MemberForm({
                 key={`${r.lat}-${r.lon}-${i}`}
                 activeOpacity={0.6}
                 style={[f.resultRow, isSelected && f.resultRowActive]}
-                onPress={() => setCityResult(r)}
+                onPress={() => { setCityResult(r); setSearchResults([]); setHasSearched(false); }}
               >
                 <Text style={f.resultText}>
                   {r.city}, {r.admin1 || ""} {r.admin1 ? "·" : ""} {r.country}

@@ -128,18 +128,6 @@ export default function TabLayout() {
                 </Text>
                 <Text
                   style={{
-                    color: "rgba(255,255,255,0.4)",
-                    fontSize: 10,
-                    fontWeight: "500",
-                    letterSpacing: 1.5,
-                    textTransform: 'uppercase',
-                    marginTop: 1,
-                  }}
-                >
-                  everyone, everywhere, all together
-                </Text>
-                <Text
-                  style={{
                     color: "rgba(255,255,255,0.5)",
                     fontSize: 13,
                     fontWeight: "600",
@@ -207,8 +195,18 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="chat"
+        options={{
+          title: "Chat",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="moments"
         options={{
+          href: null,
           title: "Moments",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="images-outline" size={size} color={color} />
