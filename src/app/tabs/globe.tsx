@@ -160,10 +160,10 @@ function startGlobe() {
       .width(window.innerWidth)
       .height(window.innerHeight)
       .backgroundColor('#07080f')
-      .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2/example/img/earth-day.jpg')
+      .globeImageUrl('https://cdn.jsdelivr.net/npm/three-globe@2/example/img/earth-night.jpg')
       .showAtmosphere(true)
-      .atmosphereColor('#4a6fa0')
-      .atmosphereAltitude(0.20);
+      .atmosphereColor('#3a2d8a')
+      .atmosphereAltitude(0.22);
 
     myGlobe.renderer().setPixelRatio(window.devicePixelRatio || 2);
 
@@ -184,16 +184,16 @@ function startGlobe() {
       .htmlTransitionDuration(0)
       .htmlElement(function(d) {
         var count = d.ids.length;
-        var fill = count > 1 ? '#7c6af7' : '#EA4335';
+        var member = MEMBERS.find(function(m) { return m.id === d.ids[0]; });
+        var label = count > 1 ? String(count) : (member ? member.name[0].toUpperCase() : '?');
+        var name = count > 1 ? d.city : (member ? member.name : d.city);
         var wrap = document.createElement('div');
-        wrap.style.cssText = 'position:relative;transform:translate(-50%,-100%);cursor:pointer;';
+        wrap.style.cssText = 'position:relative;transform:translate(-50%,-50%);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px';
         wrap.innerHTML =
-          '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 26 34">' +
-          '<path d="M13 0C5.82 0 0 5.82 0 13C0 22.75 13 34 13 34C13 34 26 22.75 26 13C26 5.82 20.18 0 13 0Z" fill="' + fill + '" stroke="white" stroke-width="2.5"/>' +
-          '<circle cx="13" cy="13" r="6" fill="white"/>' +
-          '</svg>' +
-          (count > 1 ? '<div style="position:absolute;top:-5px;right:-10px;background:#a78bfa;border-radius:8px;padding:0 5px;height:16px;font-size:9px;font-weight:800;color:white;text-align:center;line-height:16px;border:1.5px solid white;font-family:sans-serif">' + count + '</div>' : '') +
-          '<div style="position:absolute;top:34px;left:50%;transform:translateX(-50%);white-space:nowrap;color:rgba(255,255,255,0.95);font-size:9px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,1);font-family:sans-serif;pointer-events:none">' + d.city + '</div>';
+          '<div style="width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#2d1b8a,#7c6af7);border:2.5px solid rgba(167,139,250,0.85);display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(124,106,247,0.75),0 2px 8px rgba(0,0,0,0.6)">' +
+          '<span style="color:rgba(255,255,255,0.95);font-weight:800;font-size:' + (count > 1 ? '13' : '17') + 'px;font-family:-apple-system,sans-serif;line-height:1">' + label + '</span>' +
+          '</div>' +
+          '<div style="background:rgba(10,8,30,0.75);border-radius:6px;padding:2px 6px;white-space:nowrap;color:rgba(255,255,255,0.9);font-size:10px;font-weight:700;font-family:-apple-system,sans-serif;border:1px solid rgba(124,106,247,0.4)">' + name + '</div>';
         wrap.addEventListener('click', function(e) {
           e.stopPropagation();
           try { window.ReactNativeWebView.postMessage(JSON.stringify({type:'pin-click', city:d.city, memberIds:d.ids})); } catch(ex) {}

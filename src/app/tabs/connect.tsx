@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import {
+  Dimensions,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -67,93 +68,88 @@ function barColor(score: number | undefined): string {
   return "#34d399";
 }
 
-// ─── Week bar graph ───────────────────────────────────────────────────────────
+// ─── Week line graph ───────────────────────────────────────────────────────────
 
-function WeekBarGraph({
+function WeekLineGraph({
   scores,
-  highlightToday = true,
+  selectedDay,
+  onDayPress,
 }: {
   scores: Record<string, number>;
-  highlightToday?: boolean;
+  selectedDay: string;
+  onDayPress: (day: string) => void;
 }) {
   const days = currentWeekDays();
   const today = todayStr();
-  const MAX_BAR_H = 80;
+  const W = Dimensions.get("window").width - 96;
+  const LEFT = 26;
+  const RIGHT = 8;
+  const TOP = 10;
+  const BOT = 22;
+  const GRAPH_H = 90;
+  const plotW = W - LEFT - RIGHT;
+  const plotH = GRAPH_H - TOP - BOT;
+
+  const xOf = (i: number) => LEFT + (i / 6) * plotW;
+  const yOf = (score: number) => TOP + ((5 - score) / 4) * plotH;
+
+  const pts = days.map((day, i) => ({
+    day,
+    x: xOf(i),
+    y: scores[day] != null ? yOf(scores[day]) : null,
+    score: scores[day],
+    label: DAY_LABELS[i],
+    isToday: day === today,
+    isSelected: day === selectedDay,
+  }));
 
   return (
-    <View style={graph.container}>
-      {days.map((day, idx) => {
-        const score = scores[day];
-        const barH = score ? (score / 5) * MAX_BAR_H : 4;
-        const isToday = highlightToday && day === today;
-        const color = barColor(score);
+    <View style={{ height: GRAPH_H + 20, position: "relative" }}>
+      {/* Y-axis grid + labels */}
+      {[5, 4, 3, 2, 1].map((s) => (
+        <View key={s}>
+          <View style={{ position: "absolute", left: LEFT, top: yOf(s), right: RIGHT, height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255,255,255,0.08)" }} />
+          <Text style={{ position: "absolute", left: 0, top: yOf(s) - 5, width: LEFT - 2, textAlign: "right", color: "rgba(255,255,255,0.28)", fontSize: 8, fontWeight: "600" }}>
+            {s}
+          </Text>
+        </View>
+      ))}
 
+      {/* Lines between consecutive scored points */}
+      {pts.map((p, i) => {
+        if (i === 0 || p.y === null || pts[i - 1].y === null) return null;
+        const prev = pts[i - 1];
+        const dx = p.x - prev.x;
+        const dy = p.y - prev.y!;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
         return (
-          <View key={day} style={graph.col}>
-            {/* Score label above bar */}
-            <Text style={graph.scoreLabel}>{score ? String(score) : ""}</Text>
-
-            {/* Bar wrapper for bottom-alignment */}
-            <View style={{ height: MAX_BAR_H, justifyContent: "flex-end" }}>
-              <View
-                style={[
-                  graph.bar,
-                  {
-                    height: barH,
-                    backgroundColor: color,
-                    borderWidth: isToday ? 2 : 0,
-                    borderColor: "#a78bfa",
-                    borderRadius: 6,
-                  },
-                ]}
-              />
-            </View>
-
-            {/* Day label */}
-            <Text style={[graph.dayLabel, isToday && graph.dayLabelToday]}>
-              {DAY_LABELS[idx]}
-            </Text>
-          </View>
+          <View key={p.day + "-line"} style={{ position: "absolute", left: (prev.x + p.x) / 2 - len / 2, top: (prev.y! + p.y) / 2 - 1, width: len, height: 2, backgroundColor: "#a78bfa", borderRadius: 1, transform: [{ rotate: `${angle}deg` }] }} />
         );
       })}
+
+      {/* Points + day labels */}
+      {pts.map((p) => (
+        <View key={p.day}>
+          <TouchableOpacity
+            style={{ position: "absolute", left: p.x - 16, top: (p.y ?? yOf(3)) - 16, width: 32, height: 32, alignItems: "center", justifyContent: "center" }}
+            onPress={() => onDayPress(p.day)}
+            activeOpacity={0.7}
+          >
+            {p.y != null ? (
+              <View style={{ width: p.isSelected ? 14 : 10, height: p.isSelected ? 14 : 10, borderRadius: 7, backgroundColor: barColor(p.score), borderWidth: p.isSelected ? 2.5 : 1, borderColor: p.isSelected ? "#fff" : "rgba(255,255,255,0.5)" }} />
+            ) : (
+              <View style={{ width: 8, height: 8, borderRadius: 4, borderWidth: 1.5, borderColor: "rgba(255,255,255,0.2)", backgroundColor: "transparent" }} />
+            )}
+          </TouchableOpacity>
+          <Text style={{ position: "absolute", left: p.x - 14, top: GRAPH_H - 4, width: 28, textAlign: "center", color: p.isToday ? "#a78bfa" : "rgba(255,255,255,0.35)", fontSize: 9, fontWeight: p.isToday ? "700" : "500" }}>
+            {p.label}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
-
-const graph = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    paddingHorizontal: 4,
-  },
-  col: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  scoreLabel: {
-    color: "rgba(255,255,255,0.55)",
-    fontSize: 10,
-    fontWeight: "700",
-    height: 14,
-  },
-  bar: {
-    width: "70%",
-    minHeight: 4,
-    borderRadius: 6,
-  },
-  dayLabel: {
-    color: "rgba(255,255,255,0.35)",
-    fontSize: 10,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  dayLabelToday: {
-    color: "#a78bfa",
-    fontWeight: "700",
-  },
-});
 
 // ─── Stats chips ──────────────────────────────────────────────────────────────
 
@@ -208,9 +204,10 @@ function MyMoodTab() {
   const [moodMap, setMoodMap] = useState<MoodMap>({});
   const [notesMap, setNotesMap] = useState<NotesMap>({});
   const [reminderOn, setReminderOn] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(todayStr());
   const today = todayStr();
   const weekStart = weekStartStr();
-  const todayScore = moodMap[today];
+  const selectedScore = moodMap[selectedDay];
   const weekNote = notesMap[weekStart] ?? "";
   const [noteText, setNoteText] = useState(weekNote);
   const noteInitRef = useRef(false);
@@ -247,8 +244,8 @@ function MyMoodTab() {
     );
   }, []);
 
-  async function logMood(score: number) {
-    const newMap: MoodMap = { ...moodMap, [today]: score };
+  async function logMood(day: string, score: number) {
+    const newMap: MoodMap = { ...moodMap, [day]: score };
     setMoodMap(newMap);
     await AsyncStorage.setItem(MY_MOOD_KEY, JSON.stringify(newMap));
   }
@@ -282,15 +279,15 @@ function MyMoodTab() {
     >
       {/* Log today's mood */}
       <View style={mood.card}>
-        <Text style={mood.sectionTitle}>How are you feeling today?</Text>
+        <Text style={mood.sectionTitle}>How are you feeling {selectedDay === today ? "today" : DAY_LABELS[currentWeekDays().indexOf(selectedDay)] || "today"}?</Text>
         <View style={mood.scoreRow}>
           {([1, 2, 3, 4, 5] as const).map((n) => {
-            const active = todayScore === n;
+            const active = selectedScore === n;
             return (
               <TouchableOpacity
                 key={n}
                 style={[mood.scoreBtn, active && mood.scoreBtnActive]}
-                onPress={() => logMood(n)}
+                onPress={() => logMood(selectedDay, n)}
                 activeOpacity={0.7}
               >
                 <Text style={[mood.scoreNum, active && mood.scoreNumActive]}>
@@ -308,7 +305,7 @@ function MyMoodTab() {
       {/* This week's graph */}
       <View style={mood.card}>
         <Text style={mood.sectionTitle}>This week</Text>
-        <WeekBarGraph scores={moodMap} highlightToday />
+        <WeekLineGraph scores={moodMap} selectedDay={selectedDay} onDayPress={setSelectedDay} />
         <StatsRow scores={moodMap} />
       </View>
 
