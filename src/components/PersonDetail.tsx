@@ -10,6 +10,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -353,7 +354,17 @@ function ChatTab({ member }: { member: Member }) {
   const [editText, setEditText] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [kbHeight, setKbHeight] = useState(0);
   const listRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardWillShow', (e) => {
+      setKbHeight(e.endCoordinates.height);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    });
+    const hide = Keyboard.addListener('keyboardWillHide', () => setKbHeight(0));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   useEffect(() => {
     AsyncStorage.getItem(storageKey).then((raw) => {
@@ -485,7 +496,7 @@ function ChatTab({ member }: { member: Member }) {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, paddingBottom: kbHeight }}>
       <FlatList style={{ flex: 1 }} ref={listRef} data={messages} keyExtractor={(item) => item.id} renderItem={renderMessage}
         contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 16 }} showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
@@ -1071,7 +1082,6 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={d.root}>
         {/* Header */}
         <View style={d.header}>
@@ -1126,7 +1136,6 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
           onSave={handleUpdate}
         />
       </View>
-      </KeyboardAvoidingView>
     </Modal>
   );
 }
