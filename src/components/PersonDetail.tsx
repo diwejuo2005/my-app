@@ -485,8 +485,8 @@ function ChatTab({ member }: { member: Member }) {
   }
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <FlatList ref={listRef} data={messages} keyExtractor={(item) => item.id} renderItem={renderMessage}
+    <View style={{ flex: 1 }}>
+      <FlatList style={{ flex: 1 }} ref={listRef} data={messages} keyExtractor={(item) => item.id} renderItem={renderMessage}
         contentContainerStyle={{ padding: 16, gap: 8, paddingBottom: 16 }} showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={<Text style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 60, fontSize: 14 }}>No messages yet</Text>}
@@ -528,7 +528,7 @@ function ChatTab({ member }: { member: Member }) {
           </TouchableOpacity>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
