@@ -1344,10 +1344,10 @@ export default function CalendarScreen() {
       }
 
       const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+      console.log("[Cal] calendars:", cals.map((c) => `${c.title}(${c.id})`));
       const calColorMap: Record<string, string> = {};
       for (const c of cals) calColorMap[c.id] = c.color || "#60a5fa";
 
-      // Fetch ±2 months around today so navigating weeks feels instant
       const rangeStart = addDays(today, -60);
       const rangeEnd = addDays(today, 60);
       const raw = await Calendar.getEventsAsync(
@@ -1356,9 +1356,31 @@ export default function CalendarScreen() {
         rangeEnd
       );
 
-      const mapped = raw
-        .map((ev) => mapDeviceEvent(ev, calColorMap[ev.calendarId] || "#60a5fa"))
-        .filter((e): e is CalendarEvent => e !== null);
+      console.log("[Cal] raw events:", raw.length);
+      if (raw.length > 0) {
+        const s = raw[0];
+        console.log("[Cal] sample event:", JSON.stringify({
+          title: s.title,
+          allDay: s.allDay,
+          startDate: s.startDate,
+          endDate: s.endDate,
+          calendarId: s.calendarId,
+        }));
+      }
+
+      const mapped: CalendarEvent[] = [];
+      let skippedAllDay = 0, skippedBadDate = 0, skippedLate = 0;
+      for (const ev of raw) {
+        if (ev.allDay === true) { skippedAllDay++; continue; }
+        const start = parseEvDate(ev.startDate);
+        if (!start) { skippedBadDate++; continue; }
+        const sh = start.getHours();
+        const sm = start.getMinutes();
+        if (sh >= GRID_END_HOUR && sm >= 59) { skippedLate++; continue; }
+        const result = mapDeviceEvent(ev, calColorMap[ev.calendarId] || "#60a5fa");
+        if (result) mapped.push(result);
+      }
+      console.log(`[Cal] mapped=${mapped.length} skipped: allDay=${skippedAllDay} badDate=${skippedBadDate} late=${skippedLate}`);
 
       setDeviceEvents(mapped);
       setDeviceEventCount(mapped.length);
