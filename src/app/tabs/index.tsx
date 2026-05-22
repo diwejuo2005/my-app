@@ -340,10 +340,10 @@ export default function HomeScreen() {
           shadowOffset: { width: 0, height: 4 },
           elevation: 10,
         }}
-        onPress={() => router.push('/tabs/people')}
+        onPress={() => router.push('/connections')}
         activeOpacity={0.8}
       >
-        <Ionicons name="add" size={30} color="white" />
+        <Ionicons name="person-add-outline" size={24} color="white" />
       </TouchableOpacity>
       {viewingMember && (
         <PersonDetail
