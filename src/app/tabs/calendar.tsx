@@ -1313,7 +1313,9 @@ export default function CalendarScreen() {
   const weekDays = useMemo<Date[]>(() => {
     const base = startOfWeek(today);
     const shifted = addDays(base, weekOffset * 7);
-    return Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
+    const days = Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
+    console.log("[Cal] displaying week:", days[0] && toDateString(days[0]), "→", days[6] && toDateString(days[6]));
+    return days;
   }, [today, weekOffset]);
 
   // iOS 17+ distinguishes "write-only" from "full access".
@@ -1416,6 +1418,10 @@ export default function CalendarScreen() {
         .filter((e): e is CalendarEvent => e !== null);
 
       console.log("[Cal] mapped:", mapped.length);
+      console.log(
+        "[Cal] all events:\n" +
+          mapped.map((e) => `  ${e.date} ${e.startTime} "${e.title}"`).join("\n")
+      );
       setDeviceEvents(mapped);
       setDeviceEventCount(mapped.length);
     } catch (err) {
