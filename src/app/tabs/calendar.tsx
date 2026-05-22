@@ -890,17 +890,48 @@ const wh = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
+// Overlap detection
+// ---------------------------------------------------------------------------
+
+// Returns the column index and total simultaneous columns for each event so
+// only truly time-overlapping events share column space. Non-overlapping events
+// each get the full day-column width.
+function computeOverlapInfo(
+  events: CalendarEvent[]
+): Map<string, { col: number; totalCols: number }> {
+  const result = new Map<string, { col: number; totalCols: number }>();
+  if (events.length === 0) return result;
+  const sorted = [...events].sort(
+    (a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)
+  );
+  for (const ev of sorted) {
+    const evStart = timeToMinutes(ev.startTime);
+    const evEnd = timeToMinutes(ev.endTime);
+    const overlapping = sorted.filter((other) => {
+      const oStart = timeToMinutes(other.startTime);
+      const oEnd = timeToMinutes(other.endTime);
+      return oStart < evEnd && oEnd > evStart;
+    });
+    result.set(ev.id, {
+      col: overlapping.findIndex((e) => e.id === ev.id),
+      totalCols: overlapping.length,
+    });
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Event block
 // ---------------------------------------------------------------------------
 
 type EventBlockProps = {
   event: CalendarEvent;
-  siblingIndex: number;
-  totalSiblings: number;
+  col: number;
+  totalCols: number;
   onPress: (ev: CalendarEvent) => void;
 };
 
-function EventBlock({ event, siblingIndex, totalSiblings, onPress }: EventBlockProps) {
+function EventBlock({ event, col, totalCols, onPress }: EventBlockProps) {
   const startParts = event.startTime.split(":");
   const endParts = event.endTime.split(":");
   const startH = parseInt(startParts[0], 10);
@@ -909,25 +940,24 @@ function EventBlock({ event, siblingIndex, totalSiblings, onPress }: EventBlockP
   const endM = parseInt(endParts[1], 10);
 
   const top = timeToY(startH, startM);
-  const height = Math.max(timeToY(endH, endM) - top, 22);
+  const height = Math.max(timeToY(endH, endM) - top, 24);
 
-  const widthFraction = totalSiblings > 1 ? 0.88 / totalSiblings : 0.92;
-  const width = DAY_COL_WIDTH * widthFraction;
-  const left = siblingIndex * (DAY_COL_WIDTH * (0.88 / totalSiblings));
+  const slotWidth = totalCols > 1 ? (DAY_COL_WIDTH * 0.9) / totalCols : DAY_COL_WIDTH * 0.94;
+  const left = col * ((DAY_COL_WIDTH * 0.9) / totalCols);
 
   return (
     <TouchableOpacity
       style={[
         eb.block,
-        { top, height, width, left, backgroundColor: event.color + "D9", borderLeftColor: event.color },
+        { top, height, width: slotWidth, left, backgroundColor: event.color + "D9", borderLeftColor: event.color },
       ]}
       onPress={() => onPress(event)}
       activeOpacity={0.75}
     >
-      <Text style={eb.title} numberOfLines={height > 40 ? 2 : 1}>
+      <Text style={eb.title} numberOfLines={height > 38 ? 2 : 1}>
         {event.title}
       </Text>
-      {height > 38 && (
+      {height >= 30 && (
         <Text style={eb.time}>{formatTime12(event.startTime)}</Text>
       )}
     </TouchableOpacity>
@@ -937,14 +967,14 @@ function EventBlock({ event, siblingIndex, totalSiblings, onPress }: EventBlockP
 const eb = StyleSheet.create({
   block: {
     position: "absolute",
-    borderRadius: 5,
+    borderRadius: 6,
     borderLeftWidth: 3,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 3,
     overflow: "hidden",
   },
-  title: { color: "#fff", fontSize: 11, fontWeight: "700", lineHeight: 14 },
-  time: { color: "rgba(255,255,255,0.7)", fontSize: 9, marginTop: 1 },
+  title: { color: "#fff", fontSize: 12, fontWeight: "700", lineHeight: 15 },
+  time: { color: "rgba(255,255,255,0.75)", fontSize: 10, marginTop: 1 },
 });
 
 // ---------------------------------------------------------------------------
@@ -1002,6 +1032,7 @@ function TimeGrid({ weekDays, events, onPressSlot, onPressEvent }: TimeGridProps
         {weekDays.map((d, dayIdx) => {
           const ds = toDateString(d);
           const dayEvents = eventsByDay[ds] ?? [];
+          const overlap = computeOverlapInfo(dayEvents);
           return (
             <View key={dayIdx} style={[tg.dayCol, { width: DAY_COL_WIDTH }]}>
               {hours.map((h) => (
@@ -1012,15 +1043,18 @@ function TimeGrid({ weekDays, events, onPressSlot, onPressEvent }: TimeGridProps
                   activeOpacity={0.6}
                 />
               ))}
-              {dayEvents.map((ev, evIdx) => (
-                <EventBlock
-                  key={ev.id}
-                  event={ev}
-                  siblingIndex={evIdx}
-                  totalSiblings={dayEvents.length}
-                  onPress={onPressEvent}
-                />
-              ))}
+              {dayEvents.map((ev) => {
+                const info = overlap.get(ev.id) ?? { col: 0, totalCols: 1 };
+                return (
+                  <EventBlock
+                    key={ev.id}
+                    event={ev}
+                    col={info.col}
+                    totalCols={info.totalCols}
+                    onPress={onPressEvent}
+                  />
+                );
+              })}
             </View>
           );
         })}
@@ -1184,6 +1218,144 @@ const vm = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
+// Sync Setup Instructions Modal
+// ---------------------------------------------------------------------------
+
+function SyncHelpModal({
+  visible,
+  onConnect,
+  onCancel,
+}: {
+  visible: boolean;
+  onConnect: () => void;
+  onCancel: () => void;
+}) {
+  const steps = [
+    "Open the iOS Settings app",
+    "Tap Calendar → Accounts",
+    "Tap Add Account → Google",
+    "Sign in with your Google account",
+    'Enable Calendars and tap Save',
+  ];
+
+  return (
+    <Modal visible={visible} transparent animationType="slide">
+      <Pressable style={shm.overlay} onPress={onCancel}>
+        <Pressable style={shm.sheet} onPress={() => {}}>
+          <View style={shm.handle} />
+          <View style={shm.iconWrap}>
+            <Ionicons name="calendar" size={30} color={ACCENT} />
+          </View>
+          <Text style={shm.title}>Sync Your Google Calendar</Text>
+          <Text style={shm.subtitle}>
+            Connect Google to iOS Calendar so Ensemble can read your events.
+            This is a one-time setup — do it once and it syncs automatically.
+          </Text>
+          <View style={shm.stepsCard}>
+            {steps.map((step, i) => (
+              <View key={i} style={shm.stepRow}>
+                <View style={shm.stepBadge}>
+                  <Text style={shm.stepNum}>{i + 1}</Text>
+                </View>
+                <Text style={shm.stepTxt}>{step}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity style={shm.connectBtn} onPress={onConnect}>
+            <Ionicons name="link" size={16} color="#fff" style={{ marginRight: 8 }} />
+            <Text style={shm.connectTxt}>I've done this — Connect Calendar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={shm.laterBtn} onPress={onCancel}>
+            <Text style={shm.laterTxt}>Maybe later</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const shm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: "#0e0f1e",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: Platform.OS === "ios" ? 44 : 28,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignSelf: "center",
+    marginBottom: 24,
+  },
+  iconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: "rgba(167,139,250,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "center",
+    borderWidth: 1,
+    borderColor: "rgba(167,139,250,0.25)",
+    marginBottom: 18,
+  },
+  title: {
+    color: "#fff",
+    fontSize: 21,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 10,
+    letterSpacing: 0.2,
+  },
+  subtitle: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  stepsCard: {
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: 18,
+    padding: 18,
+    gap: 14,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.07)",
+  },
+  stepRow: { flexDirection: "row", alignItems: "center", gap: 14 },
+  stepBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: ACCENT,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  stepNum: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  stepTxt: { color: "rgba(255,255,255,0.85)", fontSize: 14, flex: 1, lineHeight: 20 },
+  connectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: ACCENT,
+    borderRadius: 16,
+    paddingVertical: 17,
+    marginBottom: 12,
+  },
+  connectTxt: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  laterBtn: { alignItems: "center", paddingVertical: 10 },
+  laterTxt: { color: "rgba(255,255,255,0.35)", fontSize: 14 },
+});
+
+// ---------------------------------------------------------------------------
 // Device Calendar Sync Banner
 // ---------------------------------------------------------------------------
 
@@ -1306,6 +1478,7 @@ export default function CalendarScreen() {
 
   const [visibility, setVisibility] = useState<CalendarVisibility>("full");
   const [showVisibility, setShowVisibility] = useState(false);
+  const [showSyncHelp, setShowSyncHelp] = useState(false);
 
   const today = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => toDateString(today), [today]);
@@ -1313,9 +1486,7 @@ export default function CalendarScreen() {
   const weekDays = useMemo<Date[]>(() => {
     const base = startOfWeek(today);
     const shifted = addDays(base, weekOffset * 7);
-    const days = Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
-    console.log("[Cal] displaying week:", days[0] && toDateString(days[0]), "→", days[6] && toDateString(days[6]));
-    return days;
+    return Array.from({ length: 7 }, (_, i) => addDays(shifted, i));
   }, [today, weekOffset]);
 
   // iOS 17+ distinguishes "write-only" from "full access".
@@ -1417,11 +1588,6 @@ export default function CalendarScreen() {
         .map((ev) => mapDeviceEvent(ev, calColorMap[ev.calendarId] || "#60a5fa"))
         .filter((e): e is CalendarEvent => e !== null);
 
-      console.log("[Cal] mapped:", mapped.length);
-      console.log(
-        "[Cal] all events:\n" +
-          mapped.map((e) => `  ${e.date} ${e.startTime} "${e.title}"`).join("\n")
-      );
       setDeviceEvents(mapped);
       setDeviceEventCount(mapped.length);
     } catch (err) {
@@ -1429,6 +1595,10 @@ export default function CalendarScreen() {
     } finally {
       setSyncLoading(false);
     }
+  }
+
+  function handleSyncBannerPress() {
+    setShowSyncHelp(true);
   }
 
   async function handleRequestPermission() {
@@ -1441,7 +1611,7 @@ export default function CalendarScreen() {
       } else {
         Alert.alert(
           "Full calendar access needed",
-          'Tap "Allow Full Access" when prompted, or go to Settings → Privacy & Security → Calendars → Ensemble and choose "Full Access".'
+          'Go to Settings → Privacy & Security → Calendars → Expo Go and choose "Full Access".'
         );
       }
     } finally {
@@ -1549,7 +1719,7 @@ export default function CalendarScreen() {
         synced={permissionGranted}
         eventCount={deviceEventCount}
         loading={syncLoading}
-        onSync={handleRequestPermission}
+        onSync={handleSyncBannerPress}
         onRevoke={handleRevoke}
         visibility={visibility}
         onVisibilityPress={() => setShowVisibility(true)}
@@ -1576,6 +1746,15 @@ export default function CalendarScreen() {
         value={visibility}
         onChange={handleVisibilityChange}
         onClose={() => setShowVisibility(false)}
+      />
+
+      <SyncHelpModal
+        visible={showSyncHelp}
+        onConnect={() => {
+          setShowSyncHelp(false);
+          handleRequestPermission();
+        }}
+        onCancel={() => setShowSyncHelp(false)}
       />
     </View>
   );
