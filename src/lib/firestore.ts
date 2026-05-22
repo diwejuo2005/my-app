@@ -27,6 +27,10 @@ export type UserProfile = {
   country: string;
   countryCode: string;
   timezone: string;
+  lat: number;
+  lon: number;
+  wakeHour: number;
+  sleepHour: number;
   onboardingComplete: boolean;
   createdAt: any;
 };
@@ -36,6 +40,8 @@ export type Invite = {
   creatorUid: string;
   creatorName: string;
   creatorPhotoUrl: string | null;
+  creatorCity: string;
+  creatorCountry: string;
   status: "pending" | "used" | "expired";
   usedByUid: string | null;
   createdAt: any;
@@ -99,7 +105,9 @@ export async function updateUserProfile(uid: string, data: Partial<UserProfile>)
 export async function createInvite(
   creatorUid: string,
   creatorName: string,
-  creatorPhotoUrl: string | null
+  creatorPhotoUrl: string | null,
+  creatorCity: string,
+  creatorCountry: string
 ): Promise<string> {
   const expiresAt = Timestamp.fromDate(
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
@@ -108,6 +116,8 @@ export async function createInvite(
     creatorUid,
     creatorName,
     creatorPhotoUrl,
+    creatorCity,
+    creatorCountry,
     status: "pending",
     usedByUid: null,
     createdAt: serverTimestamp(),
@@ -195,4 +205,24 @@ export async function getConnectionsWithProfiles(
     if (profile) results.push({ connection: conn, profile });
   }
   return results;
+}
+
+export function watchConnectionsWithProfiles(
+  uid: string,
+  cb: (items: Array<{ connection: Connection; profile: UserProfile }>) => void
+) {
+  const q = query(
+    collection(db, "connections"),
+    where("users", "array-contains", uid)
+  );
+  return onSnapshot(q, async (snap) => {
+    const connections = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Connection));
+    const results: Array<{ connection: Connection; profile: UserProfile }> = [];
+    for (const conn of connections) {
+      const otherUid = conn.users.find((u) => u !== uid)!;
+      const profile = await getUserProfile(otherUid);
+      if (profile) results.push({ connection: conn, profile });
+    }
+    cb(results);
+  });
 }

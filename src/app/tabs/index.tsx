@@ -14,9 +14,75 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Member, useMembers } from "../../context/MembersContext";
+import { useAuth } from "../../context/AuthContext";
+import { Connection, UserProfile, watchConnectionsWithProfiles } from "../../lib/firestore";
 import { notifyBirthday } from "../../lib/notifications";
 import PersonDetail from "../../components/PersonDetail";
+
+type Member = {
+  id: number;
+  uid: string;
+  name: string;
+  relationship: string;
+  photoUri?: string;
+  city: string;
+  country: string;
+  timezone: string;
+  lat: number;
+  lon: number;
+  wakeHour: number;
+  sleepHour: number;
+  birthday?: string;
+  anniversary?: string;
+  hometown?: string;
+  occupation?: string;
+  importantDates?: Array<{ label: string; date: string }>;
+};
+
+function uidToNum(uid: string): number {
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = Math.imul(31, h) + uid.charCodeAt(i) | 0;
+  return Math.abs(h);
+}
+
+function profileToMember(
+  profile: UserProfile,
+  connection: Connection,
+  myUid: string
+): Member {
+  return {
+    id: uidToNum(profile.uid),
+    uid: profile.uid,
+    name: profile.name,
+    relationship: connection.labels?.[myUid] ?? "Connection",
+    photoUri: profile.photoUrl ?? undefined,
+    city: profile.city,
+    country: profile.country,
+    timezone: profile.timezone || "UTC",
+    lat: profile.lat ?? 0,
+    lon: profile.lon ?? 0,
+    wakeHour: profile.wakeHour ?? 7,
+    sleepHour: profile.sleepHour ?? 22,
+  };
+}
+
+function useFirebaseMembers() {
+  const { user } = useAuth();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) { setLoading(false); return; }
+    const unsub = watchConnectionsWithProfiles(user.uid, (items) => {
+      const accepted = items.filter((i) => i.connection.status === "accepted");
+      setMembers(accepted.map(({ connection, profile }) => profileToMember(profile, connection, user.uid)));
+      setLoading(false);
+    });
+    return unsub;
+  }, [user?.uid]);
+
+  return { members, loading };
+}
 
 const GRADIENTS: Record<string, [string, string]> = {
   night: ["#060810", "#0c0e1a"],
@@ -285,10 +351,15 @@ function FamilyCard({ member, tick, onView }: { member: Member; tick: number; on
 }
 
 export default function HomeScreen() {
-  const { members, updateMember, removeMember } = useMembers();
+  const { members, loading: membersLoading } = useFirebaseMembers();
   const router = useRouter();
   const [tick, setTick] = useState(0);
   const [viewingMember, setViewingMember] = useState<Member | null>(null);
+  const [localMembers, setLocalMembers] = useState<Member[]>([]);
+
+  useEffect(() => { setLocalMembers(members); }, [members]);
+
+  const displayMembers = localMembers;
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -317,9 +388,23 @@ export default function HomeScreen() {
           contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
         >
-          {members.map((m) => (
-            <FamilyCard key={m.id} member={m} tick={tick} onView={() => setViewingMember(m)} />
-          ))}
+          {membersLoading ? (
+            <ActivityIndicator color="#a78bfa" style={{ marginTop: 60 }} />
+          ) : displayMembers.length === 0 ? (
+            <View style={{ alignItems: "center", paddingTop: 80, gap: 14 }}>
+              <Ionicons name="people-outline" size={56} color="rgba(255,255,255,0.12)" />
+              <Text style={{ color: "rgba(255,255,255,0.5)", fontSize: 18, fontWeight: "700" }}>
+                No connections yet
+              </Text>
+              <Text style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, textAlign: "center", lineHeight: 20, paddingHorizontal: 32 }}>
+                Tap the + button to invite family members and friends.
+              </Text>
+            </View>
+          ) : (
+            displayMembers.map((m) => (
+              <FamilyCard key={m.id} member={m} tick={tick} onView={() => setViewingMember(m)} />
+            ))
+          )}
           <View style={{ height: 100 }} />
         </ScrollView>
       </SafeAreaView>
@@ -350,8 +435,14 @@ export default function HomeScreen() {
           member={viewingMember}
           visible={!!viewingMember}
           onClose={() => setViewingMember(null)}
-          onUpdate={(updated) => { updateMember(updated); setViewingMember(updated); }}
-          onDelete={(id) => { removeMember(id); setViewingMember(null); }}
+          onUpdate={(updated) => {
+            setLocalMembers((prev) => prev.map((m) => m.id === updated.id ? updated : m));
+            setViewingMember(updated);
+          }}
+          onDelete={(id) => {
+            setLocalMembers((prev) => prev.filter((m) => m.id !== id));
+            setViewingMember(null);
+          }}
         />
       )}
     </View>

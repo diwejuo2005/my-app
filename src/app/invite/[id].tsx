@@ -105,6 +105,14 @@ export default function InviteScreen() {
         <Text style={s.title}>
           <Text style={s.name}>{invite?.creatorName}</Text> wants to connect with you
         </Text>
+        {(invite?.creatorCity || invite?.creatorCountry) && (
+          <View style={s.locationRow}>
+            <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.4)" />
+            <Text style={s.locationTxt}>
+              {[invite.creatorCity, invite.creatorCountry].filter(Boolean).join(", ")}
+            </Text>
+          </View>
+        )}
         <Text style={s.sub}>
           Once you connect, you'll both be able to see each other's schedule, mood, and local time.
         </Text>
@@ -171,6 +179,8 @@ const s = StyleSheet.create({
   },
   title: { color: "#fff", fontSize: 22, fontWeight: "700", textAlign: "center", marginBottom: 10, lineHeight: 30 },
   name: { color: "#a78bfa" },
+  locationRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 10 },
+  locationTxt: { color: "rgba(255,255,255,0.45)", fontSize: 13 },
   sub: { color: "rgba(255,255,255,0.45)", fontSize: 14, textAlign: "center", lineHeight: 21 },
   sectionLabel: {
     color: "rgba(255,255,255,0.45)", fontSize: 11, fontWeight: "700",

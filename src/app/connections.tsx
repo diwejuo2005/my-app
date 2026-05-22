@@ -136,7 +136,9 @@ export default function ConnectionsScreen() {
       const inviteId = await createInvite(
         user.uid,
         profile?.name || "Someone",
-        profile?.photoUrl || null
+        profile?.photoUrl || null,
+        profile?.city || "",
+        profile?.country || ""
       );
       const url = Linking.createURL(`invite/${inviteId}`);
       await Share.share({
