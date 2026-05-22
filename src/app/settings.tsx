@@ -93,19 +93,17 @@ export default function SettingsScreen() {
 
   function handleSignOut() {
     Alert.alert(
-      "Reset App",
-      "This will clear all your people and settings. Are you sure?",
+      "Sign out",
+      "Are you sure you want to sign out?",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Reset",
+          text: "Sign out",
           style: "destructive",
-          onPress: () => {
-            AsyncStorage.multiRemove(["ensemble_members", "ensemble_settings"]).then(
-              () => {
-                Alert.alert("Done", "App has been reset.");
-              },
-            );
+          onPress: async () => {
+            const { auth } = await import("../config/firebase");
+            const { signOut } = await import("firebase/auth");
+            await signOut(auth);
           },
         },
       ],
