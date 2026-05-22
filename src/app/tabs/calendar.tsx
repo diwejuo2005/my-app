@@ -173,8 +173,20 @@ function mapDeviceEvent(
   ev: Calendar.Event,
   calColor: string
 ): CalendarEvent | null {
-  // All-day events have no time component — skip them from the timed grid
-  if (ev.allDay === true) return null;
+  // All-day events: pin to 8–9 AM so they're visible on the grid
+  if (ev.allDay === true) {
+    const start = parseEvDate(ev.startDate);
+    if (!start) return null;
+    return {
+      id: `device-${ev.id}`,
+      title: ev.title || "(no title)",
+      date: toDateString(start),
+      startTime: "08:00",
+      endTime: "09:00",
+      color: calColor || "#60a5fa",
+      source: "device",
+    };
+  }
 
   const start = parseEvDate(ev.startDate);
   if (!start) return null;
@@ -1344,44 +1356,40 @@ export default function CalendarScreen() {
       }
 
       const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
-      console.log("[Cal] calendars:", cals.map((c) => `${c.title}(${c.id})`));
-      const calColorMap: Record<string, string> = {};
-      for (const c of cals) calColorMap[c.id] = c.color || "#60a5fa";
+      console.log("[Cal] found", cals.length, "calendars:", cals.map((c) => c.title).join(", "));
 
       const rangeStart = addDays(today, -60);
       const rangeEnd = addDays(today, 60);
-      const raw = await Calendar.getEventsAsync(
-        cals.map((c) => c.id),
-        rangeStart,
-        rangeEnd
-      );
 
-      console.log("[Cal] raw events:", raw.length);
-      if (raw.length > 0) {
-        const s = raw[0];
-        console.log("[Cal] sample event:", JSON.stringify({
-          title: s.title,
-          allDay: s.allDay,
-          startDate: s.startDate,
-          endDate: s.endDate,
-          calendarId: s.calendarId,
+      // Fetch per-calendar so a bad calendar can't silently drop everything
+      const allRaw: Calendar.Event[] = [];
+      for (const cal of cals) {
+        try {
+          const evs = await Calendar.getEventsAsync([cal.id], rangeStart, rangeEnd);
+          console.log(`[Cal] "${cal.title}": ${evs.length} events`);
+          allRaw.push(...evs);
+        } catch (calErr) {
+          console.warn(`[Cal] failed for "${cal.title}":`, calErr);
+        }
+      }
+
+      console.log("[Cal] total raw:", allRaw.length);
+      if (allRaw.length > 0) {
+        const s = allRaw[0];
+        console.log("[Cal] first event:", JSON.stringify({
+          title: s.title, allDay: s.allDay,
+          startDate: s.startDate, endDate: s.endDate,
         }));
       }
 
-      const mapped: CalendarEvent[] = [];
-      let skippedAllDay = 0, skippedBadDate = 0, skippedLate = 0;
-      for (const ev of raw) {
-        if (ev.allDay === true) { skippedAllDay++; continue; }
-        const start = parseEvDate(ev.startDate);
-        if (!start) { skippedBadDate++; continue; }
-        const sh = start.getHours();
-        const sm = start.getMinutes();
-        if (sh >= GRID_END_HOUR && sm >= 59) { skippedLate++; continue; }
-        const result = mapDeviceEvent(ev, calColorMap[ev.calendarId] || "#60a5fa");
-        if (result) mapped.push(result);
-      }
-      console.log(`[Cal] mapped=${mapped.length} skipped: allDay=${skippedAllDay} badDate=${skippedBadDate} late=${skippedLate}`);
+      const calColorMap: Record<string, string> = {};
+      for (const c of cals) calColorMap[c.id] = c.color || "#60a5fa";
 
+      const mapped = allRaw
+        .map((ev) => mapDeviceEvent(ev, calColorMap[ev.calendarId] || "#60a5fa"))
+        .filter((e): e is CalendarEvent => e !== null);
+
+      console.log("[Cal] mapped:", mapped.length);
       setDeviceEvents(mapped);
       setDeviceEventCount(mapped.length);
     } catch (err) {
