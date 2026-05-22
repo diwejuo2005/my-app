@@ -198,7 +198,7 @@ function mapDeviceEvent(
       date: dateStr,
       startTime: "08:00",
       endTime: "08:30",
-      color: calColor || "#60a5fa",
+      color: ACCENT,
       source: "device",
     };
   }
@@ -235,7 +235,7 @@ function mapDeviceEvent(
     date: toDateString(start),
     startTime,
     endTime,
-    color: calColor || "#60a5fa",
+    color: ACCENT,
     notes: ev.notes ?? undefined,
     source: "device",
   };
