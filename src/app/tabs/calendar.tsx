@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Calendar from "expo-calendar";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -169,20 +169,35 @@ function parseEvDate(raw: Date | string | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+// Extract "YYYY-MM-DD" from an all-day event's startDate without timezone
+// conversion. All-day events use midnight UTC, which shifts to the previous
+// day in US timezones when parsed with new Date() and local getters.
+function allDayDateString(raw: Date | string | undefined): string | null {
+  if (!raw) return null;
+  if (typeof raw === "string" && raw.length >= 10) return raw.slice(0, 10);
+  const d = raw instanceof Date ? raw : new Date(raw as string);
+  if (isNaN(d.getTime())) return null;
+  // Use UTC getters so midnight UTC stays on the correct calendar day
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function mapDeviceEvent(
   ev: Calendar.Event,
   calColor: string
 ): CalendarEvent | null {
-  // All-day events: pin to 8–9 AM so they're visible on the grid
+  // All-day events: pin to 8–9 AM using the correct UTC date
   if (ev.allDay === true) {
-    const start = parseEvDate(ev.startDate);
-    if (!start) return null;
+    const dateStr = allDayDateString(ev.startDate);
+    if (!dateStr) return null;
     return {
       id: `device-${ev.id}`,
       title: ev.title || "(no title)",
-      date: toDateString(start),
+      date: dateStr,
       startTime: "08:00",
-      endTime: "09:00",
+      endTime: "08:30",
       color: calColor || "#60a5fa",
       source: "device",
     };
@@ -948,6 +963,16 @@ function TimeGrid({ weekDays, events, onPressSlot, onPressEvent }: TimeGridProps
   for (let h = GRID_START_HOUR; h <= GRID_END_HOUR; h++) hours.push(h);
   const totalHeight = (GRID_END_HOUR - GRID_START_HOUR + 1) * HOUR_HEIGHT;
 
+  const scrollRef = useRef<ScrollView>(null);
+
+  // Scroll to 1 hour before current time so today's events are visible
+  useEffect(() => {
+    const now = new Date();
+    const h = Math.max(GRID_START_HOUR, now.getHours() - 1);
+    const offset = (h - GRID_START_HOUR) * HOUR_HEIGHT;
+    setTimeout(() => scrollRef.current?.scrollTo({ y: offset, animated: false }), 100);
+  }, []);
+
   const eventsByDay = useMemo(() => {
     const map: Record<string, CalendarEvent[]> = {};
     for (const ev of events) {
@@ -959,6 +984,7 @@ function TimeGrid({ weekDays, events, onPressSlot, onPressEvent }: TimeGridProps
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={tg.scroll}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 40 }}
