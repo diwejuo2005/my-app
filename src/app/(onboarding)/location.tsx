@@ -56,11 +56,36 @@ export default function OnboardingLocation() {
     if (!user) return;
     setLoading(true);
     try {
+      let lat = 0;
+      let lon = 0;
+      let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      try {
+        const geoRes = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city.trim())}&count=5&language=en&format=json`
+        );
+        const geoData = await geoRes.json();
+        const results = geoData?.results ?? [];
+        const match = results.find(
+          (r: any) => r.country_code?.toUpperCase() === selectedCountry.code
+        ) ?? results[0];
+        if (match) {
+          lat = match.latitude ?? 0;
+          lon = match.longitude ?? 0;
+          if (match.timezone) timezone = match.timezone;
+        }
+      } catch {
+        // geocoding failed — fall back to 0,0 and device timezone
+      }
+
       await updateUserProfile(user.uid, {
         city: city.trim(),
         country: selectedCountry.name,
         countryCode: selectedCountry.code,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezone,
+        lat,
+        lon,
+        wakeHour: 7,
+        sleepHour: 22,
         onboardingComplete: true,
       });
       router.replace("/tabs");
