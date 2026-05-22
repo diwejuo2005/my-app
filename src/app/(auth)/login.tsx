@@ -53,7 +53,7 @@ export default function LoginScreen() {
             ? "An account with this email already exists."
             : err.code === "auth/invalid-email"
               ? "Enter a valid email address."
-              : "Something went wrong. Try again.";
+              : "Something went wrong: " + (err.code ?? err.message);
       Alert.alert("Error", msg);
     } finally {
       setLoading(false);
