@@ -19,6 +19,7 @@ import {
   Connection,
   createInvite,
   getConnectionsWithProfiles,
+  getUserProfile,
   labelConnection,
   UserProfile,
 } from "../lib/firestore";
@@ -131,7 +132,6 @@ export default function ConnectionsScreen() {
     if (!user) return;
     setInviting(true);
     try {
-      const { getUserProfile } = await import("../lib/firestore");
       const profile = await getUserProfile(user.uid);
       const inviteId = await createInvite(
         user.uid,
@@ -145,7 +145,7 @@ export default function ConnectionsScreen() {
       });
     } catch (err: any) {
       if (err?.message !== "The user did not share") {
-        Alert.alert("Error", "Could not create invite link.");
+        Alert.alert("Error", String(err?.message ?? err));
       }
     } finally {
       setInviting(false);
