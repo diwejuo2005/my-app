@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MembersProvider } from "../context/MembersContext";
-import { createUserProfile, UserProfile } from "../lib/firestore";
+import { createUserProfile, UserProfile, watchUserProfile } from "../lib/firestore";
 
 function AuthGate() {
   const { user, loading } = useAuth();
@@ -15,7 +15,11 @@ function AuthGate() {
     if (loading) return;
     if (!user) { setProfile(null); return; }
     setProfile("loading");
-    createUserProfile(user.uid, user.email ?? "").then(setProfile);
+    let unsub: (() => void) | null = null;
+    createUserProfile(user.uid, user.email ?? "").then(() => {
+      unsub = watchUserProfile(user.uid, (p) => setProfile(p ?? null));
+    });
+    return () => { unsub?.(); };
   }, [user, loading]);
 
   useEffect(() => {
