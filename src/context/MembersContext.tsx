@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type Member = {
   id: number;
+  uid?: string;
   name: string;
   relationship: string;
   emoji: string;
