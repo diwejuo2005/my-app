@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Audio, Video, ResizeMode } from 'expo-av';
+import { AudioModule, createAudioPlayer, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
@@ -345,6 +346,18 @@ function NewsTab({ member }: { member: Member }) {
   );
 }
 
+function ZoomVideoPlayer({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p) => { p.play(); });
+  return (
+    <VideoView
+      player={player}
+      style={{ width: '100%', aspectRatio: 16 / 9 }}
+      contentFit="contain"
+      nativeControls
+    />
+  );
+}
+
 // ─── CHAT TAB ─────────────────────────────────────────────────────────────────
 
 function ChatTab({ member }: { member: Member }) {
@@ -355,7 +368,7 @@ function ChatTab({ member }: { member: Member }) {
   const [zoomVideo, setZoomVideo] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
   const [kbHeight, setKbHeight] = useState(0);
   const listRef = useRef<FlatList>(null);
@@ -403,24 +416,19 @@ function ChatTab({ member }: { member: Member }) {
 
   async function startRecording() {
     try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
-      const { recording: rec } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(rec);
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) { Alert.alert('Could not start recording'); return; }
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
       setIsRecording(true);
     } catch { Alert.alert('Could not start recording'); }
   }
 
   async function stopRecording() {
-    if (!recording) return;
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(null);
+      await audioRecorder.stop();
+      const uri = audioRecorder.uri;
       setIsRecording(false);
       if (uri) {
         const msg: Message = { id: Date.now().toString(), text: '', audioUri: uri, timestamp: new Date().toISOString(), sent: true };
@@ -448,13 +456,12 @@ function ChatTab({ member }: { member: Member }) {
 
   async function playAudio(uri: string) {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      const player = createAudioPlayer(uri);
+      player.addListener('playbackStatusUpdate', (status) => {
+        if (status.didJustFinish) player.remove();
       });
-      const { sound } = await Audio.Sound.createAsync({ uri }, { volume: 1.0 });
-      await sound.playAsync();
+      player.play();
     } catch { Alert.alert('Could not play audio'); }
   }
 
@@ -528,15 +535,7 @@ function ChatTab({ member }: { member: Member }) {
 
       <Modal visible={!!zoomVideo} transparent animationType="fade" onRequestClose={() => setZoomVideo(null)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center' }}>
-          {zoomVideo ? (
-            <Video
-              source={{ uri: zoomVideo }}
-              style={{ width: '100%', aspectRatio: 16 / 9 }}
-              resizeMode={ResizeMode.CONTAIN}
-              useNativeControls
-              shouldPlay
-            />
-          ) : null}
+          {zoomVideo ? <ZoomVideoPlayer uri={zoomVideo} /> : null}
           <TouchableOpacity onPress={() => setZoomVideo(null)} style={{ position: 'absolute', top: 56, right: 20, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}>
             <Ionicons name="close" size={22} color="white" />
           </TouchableOpacity>
