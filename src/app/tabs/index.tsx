@@ -15,29 +15,10 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
+import { Member } from "../../context/MembersContext";
 import { Connection, UserProfile, watchConnectionsWithProfiles } from "../../lib/firestore";
 import { notifyBirthday } from "../../lib/notifications";
 import PersonDetail from "../../components/PersonDetail";
-
-type Member = {
-  id: number;
-  uid: string;
-  name: string;
-  relationship: string;
-  photoUri?: string;
-  city: string;
-  country: string;
-  timezone: string;
-  lat: number;
-  lon: number;
-  wakeHour: number;
-  sleepHour: number;
-  birthday?: string;
-  anniversary?: string;
-  hometown?: string;
-  occupation?: string;
-  importantDates?: Array<{ label: string; date: string }>;
-};
 
 function uidToNum(uid: string): number {
   let h = 0;

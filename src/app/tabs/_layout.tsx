@@ -1,9 +1,8 @@
-import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts, DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
 import { Tabs, useRouter, usePathname } from "expo-router";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { ComponentProps, useEffect, useState } from 'react';
 import {
   Image,
   SafeAreaView,
@@ -27,7 +26,12 @@ type UserProfile = {
   sleepHour?: number;
 };
 
-function ScrollableTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+// expo-router vendors its own BottomTabBarProps type (not publicly exported) that's
+// structurally close to but not identical to @react-navigation/bottom-tabs's own —
+// infer it from the Tabs component itself so the two never drift out of sync.
+type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>["tabBar"]>>[0];
+
+function ScrollableTabBar({ state, descriptors, navigation }: TabBarProps) {
   return (
     <View
       style={{

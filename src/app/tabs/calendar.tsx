@@ -185,7 +185,7 @@ function allDayDateString(raw: Date | string | undefined): string | null {
 }
 
 function mapDeviceEvent(
-  ev: Calendar.Event,
+  ev: Calendar.ExpoCalendarEvent,
   calColor: string
 ): CalendarEvent | null {
   // All-day events: pin to 8–9 AM using the correct UTC date
@@ -1561,10 +1561,13 @@ export default function CalendarScreen() {
       const rangeEnd = addDays(today, 60);
 
       // Fetch per-calendar so a bad calendar can't silently drop everything
-      const allRaw: Calendar.Event[] = [];
+      const allRaw: Calendar.ExpoCalendarEvent[] = [];
       for (const cal of cals) {
         try {
-          const evs = await Calendar.getEventsAsync([cal.id], rangeStart, rangeEnd);
+          // expo-calendar's legacy getEventsAsync .d.ts mistakenly types its return as
+          // the global DOM `Event[]` (a missing import in its own type shim); the actual
+          // runtime objects are ExpoCalendarEvent.
+          const evs = await Calendar.getEventsAsync([cal.id], rangeStart, rangeEnd) as unknown as Calendar.ExpoCalendarEvent[];
           console.log(`[Cal] "${cal.title}": ${evs.length} events`);
           allRaw.push(...evs);
         } catch (calErr) {
