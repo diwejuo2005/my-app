@@ -10,15 +10,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // users/{uid} — a user's own profile.
-    // `get` (single-doc read by known uid) is allowed for any signed-in
-    // user, since watchConnectionsWithProfiles() reads a connection
-    // partner's profile by uid. `list` (querying the whole collection) is
-    // deliberately not allowed, so profiles can't be enumerated — you can
-    // only read one if you already know its uid.
+    // users/{uid} — a user's own profile. Nothing else ever needs to read
+    // another user's profile doc directly: invites embed a `creatorProfile`
+    // snapshot, and connections embed a `profiles` map for both
+    // participants (kept in sync by updateUserProfile), so this is
+    // strictly self-only.
     match /users/{uid} {
-      allow get: if request.auth != null;
-      allow list: if false;
+      allow read: if request.auth != null && request.auth.uid == uid;
       allow create: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.uid == uid;
