@@ -1,45 +1,65 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MembersProvider } from "../context/MembersContext";
-import { createUserProfile, UserProfile } from "../lib/firestore";
+import { createUserProfile, UserProfile, watchUserProfile } from "../lib/firestore";
+
+const PENDING_INVITE_KEY = "pendingInviteId";
 
 function AuthGate() {
   const { user, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null | "loading">("loading");
+  // "unchecked" means we haven't read AsyncStorage yet — block routing until we do
+  const [pendingInvite, setPendingInvite] = useState<string | null | "unchecked">("unchecked");
 
-  // Whenever auth user changes, load (or create) their Firestore profile
+  useEffect(() => {
+    AsyncStorage.getItem(PENDING_INVITE_KEY).then((id) => setPendingInvite(id ?? null));
+  }, []);
+
   useEffect(() => {
     if (loading) return;
     if (!user) { setProfile(null); return; }
     setProfile("loading");
-    createUserProfile(user.uid, user.email ?? "").then(setProfile);
+    let unsub: (() => void) | null = null;
+    createUserProfile(user.uid, user.email ?? "").then(() => {
+      unsub = watchUserProfile(user.uid, (p) => setProfile(p ?? null));
+    });
+    return () => { unsub?.(); };
   }, [user, loading]);
 
   useEffect(() => {
-    if (loading || profile === "loading") return;
+    if (loading || profile === "loading" || pendingInvite === "unchecked") return;
 
     const inAuth = segments[0] === "(auth)";
     const inOnboarding = segments[0] === "(onboarding)";
+    const inInvite = segments[0] === "invite";
 
     if (!user) {
-      // Not logged in → login screen
-      if (!inAuth) router.replace("/(auth)/login");
+      // Let the invite screen handle its own unauthenticated state
+      if (!inAuth && !inInvite) router.replace("/(auth)/login");
       return;
     }
 
     if (!profile?.onboardingComplete) {
-      // Logged in but hasn't finished onboarding
-      if (!inOnboarding) router.replace("/(onboarding)/profile");
+      if (!inOnboarding) router.replace("/(onboarding)/location");
       return;
     }
 
-    // Fully set up → main app
-    if (inAuth || inOnboarding) router.replace("/tabs");
-  }, [user, loading, profile, segments]);
+    // Fully authenticated and onboarded
+    if (inAuth || inOnboarding) {
+      if (pendingInvite) {
+        AsyncStorage.removeItem(PENDING_INVITE_KEY);
+        setPendingInvite(null);
+        router.replace(`/invite/${pendingInvite}` as any);
+      } else {
+        router.replace("/tabs");
+      }
+    }
+  }, [user, loading, profile, segments, pendingInvite]);
 
   if (loading || profile === "loading") {
     return (

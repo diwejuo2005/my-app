@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -13,6 +14,8 @@ import {
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { acceptInvite, getInvite, Invite } from "../../lib/firestore";
+
+const PENDING_INVITE_KEY = "pendingInviteId";
 
 const RELATIONSHIP_OPTIONS = [
   { label: "Father", icon: "👨" },
@@ -33,23 +36,23 @@ const RELATIONSHIP_OPTIONS = [
 
 export default function InviteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [invite, setInvite] = useState<Invite | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [inviteLoading, setInviteLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
   const [accepting, setAccepting] = useState(false);
 
   useEffect(() => {
-    if (!id) { setError("Invalid invite link."); setLoading(false); return; }
+    if (!id) { setError("Invalid invite link."); setInviteLoading(false); return; }
     getInvite(id).then((inv) => {
       if (!inv) { setError("This invite link is invalid or has expired."); }
       else if (inv.status === "used") { setError("This invite has already been used."); }
-      else if (inv.creatorUid === user?.uid) { setError("You can't connect with yourself!"); }
+      else if (user && inv.creatorUid === user.uid) { setError("You can't connect with yourself!"); }
       else { setInvite(inv); }
-      setLoading(false);
+      setInviteLoading(false);
     });
   }, [id, user?.uid]);
 
@@ -59,7 +62,7 @@ export default function InviteScreen() {
     setAccepting(true);
     try {
       await acceptInvite(id as string, invite, user.uid, selectedLabel);
-      router.replace("/connections");
+      router.replace("/tabs");
     } catch {
       Alert.alert("Error", "Could not accept the invite. Try again.");
     } finally {
@@ -67,12 +70,59 @@ export default function InviteScreen() {
     }
   }
 
-  if (loading) {
+  // Wait for auth to resolve before showing anything
+  if (authLoading) {
+    return <View style={s.center}><ActivityIndicator color="#a78bfa" size="large" /></View>;
+  }
+
+  // Not logged in — show sign-in prompt and save the invite ID
+  if (!user) {
     return (
       <View style={s.center}>
-        <ActivityIndicator color="#a78bfa" size="large" />
+        {inviteLoading ? (
+          <ActivityIndicator color="#a78bfa" size="large" style={{ marginBottom: 24 }} />
+        ) : invite ? (
+          <>
+            <View style={s.avatarWrap}>
+              {invite.creatorPhotoUrl ? (
+                <Image source={{ uri: invite.creatorPhotoUrl }} style={s.avatar} />
+              ) : (
+                <View style={s.avatarFallback}>
+                  <Text style={s.avatarInitial}>{invite.creatorName?.[0]?.toUpperCase()}</Text>
+                </View>
+              )}
+            </View>
+            <Text style={s.title}>
+              <Text style={s.name}>{invite.creatorName}</Text> wants to connect with you
+            </Text>
+            {(invite.creatorCity || invite.creatorCountry) && (
+              <View style={s.locationRow}>
+                <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.4)" />
+                <Text style={s.locationTxt}>
+                  {[invite.creatorCity, invite.creatorCountry].filter(Boolean).join(", ")}
+                </Text>
+              </View>
+            )}
+          </>
+        ) : (
+          <Ionicons name="people-outline" size={56} color="rgba(255,255,255,0.2)" />
+        )}
+        <Text style={s.signInPrompt}>Sign in to accept this invite</Text>
+        <TouchableOpacity
+          style={s.btn}
+          onPress={async () => {
+            if (id) await AsyncStorage.setItem(PENDING_INVITE_KEY, id as string);
+            router.replace("/(auth)/login");
+          }}
+        >
+          <Text style={s.btnTxt}>Sign In / Create Account</Text>
+        </TouchableOpacity>
       </View>
     );
+  }
+
+  if (inviteLoading) {
+    return <View style={s.center}><ActivityIndicator color="#a78bfa" size="large" /></View>;
   }
 
   if (error) {
@@ -109,12 +159,12 @@ export default function InviteScreen() {
           <View style={s.locationRow}>
             <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.4)" />
             <Text style={s.locationTxt}>
-              {[invite.creatorCity, invite.creatorCountry].filter(Boolean).join(", ")}
+              {[invite?.creatorCity, invite?.creatorCountry].filter(Boolean).join(", ")}
             </Text>
           </View>
         )}
         <Text style={s.sub}>
-          Once you connect, you'll both be able to see each other's schedule, mood, and local time.
+          Once you connect, you'll both see each other's local time, weather, news, and more.
         </Text>
       </View>
 
@@ -200,10 +250,12 @@ const s = StyleSheet.create({
   optionTxtActive: { color: "#fff" },
   btn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#a78bfa", borderRadius: 14, paddingVertical: 16, marginBottom: 12,
+    backgroundColor: "#a78bfa", borderRadius: 14, paddingVertical: 16,
+    marginBottom: 12, width: "100%",
   },
   btnTxt: { color: "#fff", fontSize: 16, fontWeight: "700" },
   errorTxt: { color: "rgba(255,255,255,0.5)", fontSize: 15, textAlign: "center", lineHeight: 22 },
+  signInPrompt: { color: "rgba(255,255,255,0.6)", fontSize: 16, fontWeight: "600", textAlign: "center" },
   declineBtn: { alignItems: "center", paddingVertical: 12 },
   declineTxt: { color: "rgba(255,255,255,0.3)", fontSize: 14 },
 });

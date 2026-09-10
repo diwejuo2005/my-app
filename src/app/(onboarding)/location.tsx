@@ -1,11 +1,10 @@
-import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -40,7 +39,7 @@ const COUNTRIES = [
 
 export default function OnboardingLocation() {
   const { user } = useAuth();
-  const router = useRouter();
+  const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [countrySearch, setCountrySearch] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<{ code: string; name: string } | null>(null);
@@ -50,7 +49,8 @@ export default function OnboardingLocation() {
     c.name.toLowerCase().includes(countrySearch.toLowerCase())
   ).slice(0, 6);
 
-  async function handleNext() {
+  async function handleFinish() {
+    if (!name.trim()) { Alert.alert("Name required", "Enter your name."); return; }
     if (!city.trim()) { Alert.alert("City required", "Enter your city."); return; }
     if (!selectedCountry) { Alert.alert("Country required", "Select your country."); return; }
     if (!user) return;
@@ -78,6 +78,7 @@ export default function OnboardingLocation() {
       }
 
       await updateUserProfile(user.uid, {
+        name: name.trim(),
         city: city.trim(),
         country: selectedCountry.name,
         countryCode: selectedCountry.code,
@@ -88,9 +89,9 @@ export default function OnboardingLocation() {
         sleepHour: 22,
         onboardingComplete: true,
       });
-      router.replace("/tabs");
+      // AuthGate watches the profile via onSnapshot and navigates to /tabs automatically
     } catch {
-      Alert.alert("Error", "Could not save location. Try again.");
+      Alert.alert("Error", "Could not save your info. Try again.");
     } finally {
       setLoading(false);
     }
@@ -101,76 +102,89 @@ export default function OnboardingLocation() {
       style={s.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={s.progress}>
-        <View style={[s.dot, s.dotDone]} />
-        <View style={[s.dot, s.dotActive]} />
-        <View style={s.dot} />
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={s.progress}>
+          <View style={[s.dot, s.dotDone]} />
+          <View style={[s.dot, s.dotActive]} />
+          <View style={s.dot} />
+        </View>
 
-      <Text style={s.heading}>Where are you?</Text>
-      <Text style={s.sub}>Your location sets the local time and news your connections see for you.</Text>
+        <Text style={s.heading}>Set up your profile</Text>
+        <Text style={s.sub}>Your name and location help your connections see who you are and where you are in the world.</Text>
 
-      <Text style={s.label}>City</Text>
-      <TextInput
-        style={s.input}
-        value={city}
-        onChangeText={setCity}
-        placeholder="e.g. Durham"
-        placeholderTextColor="rgba(255,255,255,0.25)"
-        autoCapitalize="words"
-        returnKeyType="next"
-      />
+        <Text style={s.label}>Your name</Text>
+        <TextInput
+          style={s.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. Donald"
+          placeholderTextColor="rgba(255,255,255,0.25)"
+          autoCapitalize="words"
+          returnKeyType="next"
+        />
 
-      <Text style={s.label}>Country</Text>
-      {selectedCountry ? (
-        <TouchableOpacity
-          style={s.selectedCountry}
-          onPress={() => { setSelectedCountry(null); setCountrySearch(""); }}
-        >
-          <Text style={s.selectedCountryTxt}>{selectedCountry.name}</Text>
-          <Text style={s.changeTxt}>Change</Text>
-        </TouchableOpacity>
-      ) : (
-        <>
-          <TextInput
-            style={s.input}
-            value={countrySearch}
-            onChangeText={setCountrySearch}
-            placeholder="Search country…"
-            placeholderTextColor="rgba(255,255,255,0.25)"
-            autoCapitalize="words"
-          />
-          {countrySearch.length > 0 && (
-            <View style={s.dropdown}>
-              {filtered.map((c) => (
-                <TouchableOpacity
-                  key={c.code}
-                  style={s.dropdownItem}
-                  onPress={() => { setSelectedCountry(c); setCountrySearch(""); }}
-                >
-                  <Text style={s.dropdownTxt}>{c.name}</Text>
-                </TouchableOpacity>
-              ))}
-              {filtered.length === 0 && (
-                <Text style={s.dropdownEmpty}>No results</Text>
-              )}
-            </View>
-          )}
-        </>
-      )}
+        <Text style={s.label}>City</Text>
+        <TextInput
+          style={s.input}
+          value={city}
+          onChangeText={setCity}
+          placeholder="e.g. Durham"
+          placeholderTextColor="rgba(255,255,255,0.25)"
+          autoCapitalize="words"
+          returnKeyType="next"
+        />
 
-      <TouchableOpacity
-        style={[s.btn, loading && { opacity: 0.6 }, { marginTop: 32 }]}
-        onPress={handleNext}
-        disabled={loading}
-        activeOpacity={0.8}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
+        <Text style={s.label}>Country</Text>
+        {selectedCountry ? (
+          <TouchableOpacity
+            style={s.selectedCountry}
+            onPress={() => { setSelectedCountry(null); setCountrySearch(""); }}
+          >
+            <Text style={s.selectedCountryTxt}>{selectedCountry.name}</Text>
+            <Text style={s.changeTxt}>Change</Text>
+          </TouchableOpacity>
         ) : (
-          <Text style={s.btnTxt}>Finish setup</Text>
+          <>
+            <TextInput
+              style={s.input}
+              value={countrySearch}
+              onChangeText={setCountrySearch}
+              placeholder="Search country…"
+              placeholderTextColor="rgba(255,255,255,0.25)"
+              autoCapitalize="words"
+            />
+            {countrySearch.length > 0 && (
+              <View style={s.dropdown}>
+                {filtered.map((c) => (
+                  <TouchableOpacity
+                    key={c.code}
+                    style={s.dropdownItem}
+                    onPress={() => { setSelectedCountry(c); setCountrySearch(""); }}
+                  >
+                    <Text style={s.dropdownTxt}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                {filtered.length === 0 && (
+                  <Text style={s.dropdownEmpty}>No results</Text>
+                )}
+              </View>
+            )}
+          </>
         )}
-      </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[s.btn, loading && { opacity: 0.6 }, { marginTop: 32, marginBottom: 48 }]}
+          onPress={handleFinish}
+          disabled={loading}
+          activeOpacity={0.8}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={s.btnTxt}>Finish setup</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -185,7 +199,7 @@ const s = StyleSheet.create({
   sub: { color: "rgba(255,255,255,0.45)", fontSize: 15, marginBottom: 36, lineHeight: 22 },
   label: {
     color: "rgba(255,255,255,0.45)", fontSize: 11, fontWeight: "600",
-    letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8, marginTop: 4,
+    letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8, marginTop: 12,
   },
   input: {
     backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 14,
