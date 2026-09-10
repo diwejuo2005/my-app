@@ -21,7 +21,8 @@ import {
   getConnectionsWithProfiles,
   getUserProfile,
   labelConnection,
-  UserProfile,
+  ProfileSnapshot,
+  toProfileSnapshot,
 } from "../lib/firestore";
 
 const RELATIONSHIP_OPTIONS = [
@@ -105,7 +106,7 @@ const lp = StyleSheet.create({
   saveTxt: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });
 
-type ConnWithProfile = { connection: Connection; profile: UserProfile };
+type ConnWithProfile = { connection: Connection; profile: ProfileSnapshot };
 
 export default function ConnectionsScreen() {
   const { user } = useAuth();
@@ -133,13 +134,8 @@ export default function ConnectionsScreen() {
     setInviting(true);
     try {
       const profile = await getUserProfile(user.uid);
-      const inviteId = await createInvite(
-        user.uid,
-        profile?.name || "Someone",
-        profile?.photoUrl || null,
-        profile?.city || "",
-        profile?.country || ""
-      );
+      if (!profile) { Alert.alert("Error", "Could not load your profile."); return; }
+      const inviteId = await createInvite(user.uid, toProfileSnapshot(profile));
       const url = Linking.createURL(`invite/${inviteId}`);
       await Share.share({
         message: `Join me on Ensemble! Tap this link to connect: ${url}`,

@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { Member } from "../../context/MembersContext";
-import { Connection, UserProfile, watchConnectionsWithProfiles } from "../../lib/firestore";
+import { Connection, ProfileSnapshot, watchConnectionsWithProfiles } from "../../lib/firestore";
 import { notifyBirthday } from "../../lib/notifications";
 import PersonDetail from "../../components/PersonDetail";
 
@@ -27,7 +27,7 @@ function uidToNum(uid: string): number {
 }
 
 function profileToMember(
-  profile: UserProfile,
+  profile: ProfileSnapshot,
   connection: Connection,
   myUid: string
 ): Member {
