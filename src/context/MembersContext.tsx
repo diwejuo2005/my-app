@@ -3,9 +3,10 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 
 export type Member = {
   id: number;
+  uid?: string;
   name: string;
   relationship: string;
-  emoji: string;
+  photoUri?: string;
   city: string;
   country: string;
   timezone: string;
@@ -13,6 +14,11 @@ export type Member = {
   lon: number;
   wakeHour: number;
   sleepHour: number;
+  birthday?: string;        // "YYYY-MM-DD"
+  anniversary?: string;     // "YYYY-MM-DD"
+  hometown?: string;        // free text
+  occupation?: string;      // free text
+  importantDates?: Array<{ label: string; date: string }>; // up to 5
 };
 
 const DEFAULTS: Member[] = [
@@ -20,7 +26,6 @@ const DEFAULTS: Member[] = [
     id: 1,
     name: "Mom",
     relationship: "Mother",
-    emoji: "👩",
     city: "New York",
     country: "US",
     timezone: "America/New_York",
@@ -33,7 +38,6 @@ const DEFAULTS: Member[] = [
     id: 2,
     name: "Dad",
     relationship: "Father",
-    emoji: "👨",
     city: "Chicago",
     country: "US",
     timezone: "America/Chicago",
@@ -46,7 +50,6 @@ const DEFAULTS: Member[] = [
     id: 3,
     name: "Nani",
     relationship: "Grandmother",
-    emoji: "👵",
     city: "Mumbai",
     country: "IN",
     timezone: "Asia/Kolkata",
@@ -59,7 +62,6 @@ const DEFAULTS: Member[] = [
     id: 4,
     name: "Alex",
     relationship: "Sibling",
-    emoji: "🧑",
     city: "London",
     country: "GB",
     timezone: "Europe/London",
@@ -82,8 +84,37 @@ export function MembersProvider({ children }: { children: React.ReactNode }) {
   const [members, setMembers] = useState<Member[]>(DEFAULTS);
 
   useEffect(() => {
-    AsyncStorage.getItem("ensemble_members").then((d) => {
-      if (d) setMembers(JSON.parse(d));
+    AsyncStorage.getItem("ensemble_members").then(async (d) => {
+      if (!d) return;
+      const parsed: Member[] = JSON.parse(d);
+      let filled = parsed.map((stored) => {
+        const def = DEFAULTS.find((x) => x.id === stored.id);
+        return { ...def, ...stored, timezone: stored.timezone || def?.timezone || "UTC" };
+      });
+
+      // Auto-correct members whose timezone is "GMT" — this was incorrectly stored
+      // by a bug in the city search fallback that used the weather API without timezone=auto.
+      const needsFix = filled.some((m) => m.timezone === "GMT");
+      if (needsFix) {
+        filled = await Promise.all(
+          filled.map(async (m) => {
+            if (m.timezone !== "GMT") return m;
+            try {
+              const res = await fetch(
+                `https://api.open-meteo.com/v1/forecast?latitude=${m.lat}&longitude=${m.lon}&current=temperature_2m&timezone=auto`,
+              );
+              const data = await res.json();
+              if (data?.timezone && data.timezone !== "GMT") {
+                return { ...m, timezone: data.timezone };
+              }
+            } catch {}
+            return m;
+          }),
+        );
+        AsyncStorage.setItem("ensemble_members", JSON.stringify(filled));
+      }
+
+      setMembers(filled);
     });
   }, []);
 

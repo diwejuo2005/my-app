@@ -1,15 +1,307 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Linking,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { Member, useMembers } from "../../context/MembersContext";
+import { notifyCritical } from "../../lib/notifications";
+
+const AVATAR_COLORS = [
+  "#2d3a5a",
+  "#2d4a3e",
+  "#3a2d4a",
+  "#4a3a2d",
+  "#2d4a4a",
+];
+
+function getAvatarColor(id: number) {
+  return AVATAR_COLORS[id % AVATAR_COLORS.length];
+}
+
+const COUNTRY_TAG: Record<string, string> = {
+  US: "world/united-states",
+  GB: "world/uk",
+  IN: "world/india",
+  AU: "world/australia",
+  CA: "world/canada",
+  FR: "world/france",
+  DE: "world/germany",
+  JP: "world/japan",
+  CN: "world/china",
+  BR: "world/brazil",
+  MX: "world/mexico",
+  NG: "world/nigeria",
+  ZA: "world/south-africa",
+  IT: "world/italy",
+  ES: "world/spain",
+  PK: "world/pakistan",
+  GH: "world/ghana",
+  KE: "world/kenya",
+  EG: "world/egypt",
+  ET: "world/ethiopia",
+  RU: "world/russia",
+  UA: "world/ukraine",
+  IL: "world/israel",
+  IR: "world/iran",
+  SA: "world/saudiarabia",
+  AE: "world/uae",
+  TR: "world/turkey",
+  GR: "world/greece",
+  PT: "world/portugal",
+  NL: "world/netherlands",
+  BE: "world/belgium",
+  CH: "world/switzerland",
+  AT: "world/austria",
+  SE: "world/sweden",
+  NO: "world/norway",
+  DK: "world/denmark",
+  FI: "world/finland",
+  IE: "world/ireland",
+  PL: "world/poland",
+  RO: "world/romania",
+  HU: "world/hungary",
+  CZ: "world/czech-republic",
+  KR: "world/south-korea",
+  KP: "world/north-korea",
+  TH: "world/thailand",
+  VN: "world/vietnam",
+  ID: "world/indonesia",
+  PH: "world/philippines",
+  MY: "world/malaysia",
+  SG: "world/singapore",
+  NZ: "world/new-zealand",
+  AR: "world/argentina",
+  CL: "world/chile",
+  CO: "world/colombia",
+  PE: "world/peru",
+  VE: "world/venezuela",
+  BD: "world/bangladesh",
+  LK: "world/sri-lanka",
+  NP: "world/nepal",
+  MM: "world/burma",
+  AF: "world/afghanistan",
+  IQ: "world/iraq",
+  SY: "world/syria",
+  LB: "world/lebanon",
+  JO: "world/jordan",
+  YE: "world/yemen",
+  MA: "world/morocco",
+  DZ: "world/algeria",
+  TN: "world/tunisia",
+  LY: "world/libya",
+  SD: "world/sudan",
+  SS: "world/southsudan",
+  SO: "world/somalia",
+  UG: "world/uganda",
+  TZ: "world/tanzania",
+  RW: "world/rwanda",
+  CM: "world/cameroon",
+  CI: "world/ivorycoast",
+  SN: "world/senegal",
+  ZW: "world/zimbabwe",
+  ZM: "world/zambia",
+  MZ: "world/mozambique",
+};
+
+const COUNTRY_NAME: Record<string, string> = {
+  US: "United States",
+  GB: "United Kingdom",
+  IN: "India",
+  AU: "Australia",
+  CA: "Canada",
+  FR: "France",
+  DE: "Germany",
+  JP: "Japan",
+  CN: "China",
+  BR: "Brazil",
+  MX: "Mexico",
+  NG: "Nigeria",
+  ZA: "South Africa",
+  IT: "Italy",
+  ES: "Spain",
+  PK: "Pakistan",
+  GH: "Ghana",
+  KE: "Kenya",
+  EG: "Egypt",
+  ET: "Ethiopia",
+  RU: "Russia",
+  UA: "Ukraine",
+  IL: "Israel",
+  IR: "Iran",
+  SA: "Saudi Arabia",
+  AE: "United Arab Emirates",
+  TR: "Turkey",
+  GR: "Greece",
+  PT: "Portugal",
+  NL: "Netherlands",
+  BE: "Belgium",
+  CH: "Switzerland",
+  AT: "Austria",
+  SE: "Sweden",
+  NO: "Norway",
+  DK: "Denmark",
+  FI: "Finland",
+  IE: "Ireland",
+  PL: "Poland",
+  RO: "Romania",
+  HU: "Hungary",
+  CZ: "Czech Republic",
+  KR: "South Korea",
+  KP: "North Korea",
+  TH: "Thailand",
+  VN: "Vietnam",
+  ID: "Indonesia",
+  PH: "Philippines",
+  MY: "Malaysia",
+  SG: "Singapore",
+  NZ: "New Zealand",
+  AR: "Argentina",
+  CL: "Chile",
+  CO: "Colombia",
+  PE: "Peru",
+  VE: "Venezuela",
+  BD: "Bangladesh",
+  LK: "Sri Lanka",
+  NP: "Nepal",
+  MM: "Myanmar",
+  AF: "Afghanistan",
+  IQ: "Iraq",
+  SY: "Syria",
+  LB: "Lebanon",
+  JO: "Jordan",
+  YE: "Yemen",
+  MA: "Morocco",
+  DZ: "Algeria",
+  TN: "Tunisia",
+  LY: "Libya",
+  SD: "Sudan",
+  SS: "South Sudan",
+  SO: "Somalia",
+  UG: "Uganda",
+  TZ: "Tanzania",
+  RW: "Rwanda",
+  CM: "Cameroon",
+  CI: "Ivory Coast",
+  SN: "Senegal",
+  ZW: "Zimbabwe",
+  ZM: "Zambia",
+  MZ: "Mozambique",
+  KW: "Kuwait",
+  QA: "Qatar",
+  BH: "Bahrain",
+  OM: "Oman",
+  CU: "Cuba",
+  HT: "Haiti",
+  DO: "Dominican Republic",
+  JM: "Jamaica",
+  PR: "Puerto Rico",
+  TT: "Trinidad and Tobago",
+  BS: "Bahamas",
+  BZ: "Belize",
+  CR: "Costa Rica",
+  PA: "Panama",
+  NI: "Nicaragua",
+  HN: "Honduras",
+  SV: "El Salvador",
+  GT: "Guatemala",
+  EC: "Ecuador",
+  BO: "Bolivia",
+  PY: "Paraguay",
+  UY: "Uruguay",
+  GY: "Guyana",
+  SR: "Suriname",
+  IS: "Iceland",
+  LU: "Luxembourg",
+  MC: "Monaco",
+  MT: "Malta",
+  CY: "Cyprus",
+  EE: "Estonia",
+  LV: "Latvia",
+  LT: "Lithuania",
+  SK: "Slovakia",
+  SI: "Slovenia",
+  HR: "Croatia",
+  BA: "Bosnia and Herzegovina",
+  RS: "Serbia",
+  ME: "Montenegro",
+  MK: "North Macedonia",
+  AL: "Albania",
+  BG: "Bulgaria",
+  MD: "Moldova",
+  BY: "Belarus",
+  GE: "Georgia",
+  AM: "Armenia",
+  AZ: "Azerbaijan",
+  KZ: "Kazakhstan",
+  UZ: "Uzbekistan",
+  TM: "Turkmenistan",
+  KG: "Kyrgyzstan",
+  TJ: "Tajikistan",
+  MN: "Mongolia",
+  BT: "Bhutan",
+  MV: "Maldives",
+  BN: "Brunei",
+  TL: "Timor-Leste",
+  LA: "Laos",
+  KH: "Cambodia",
+  TW: "Taiwan",
+  HK: "Hong Kong",
+  MO: "Macau",
+  FJ: "Fiji",
+  PG: "Papua New Guinea",
+  SB: "Solomon Islands",
+  VU: "Vanuatu",
+  NC: "New Caledonia",
+  PF: "French Polynesia",
+  WS: "Samoa",
+  TO: "Tonga",
+  KI: "Kiribati",
+  PW: "Palau",
+  FM: "Micronesia",
+  MH: "Marshall Islands",
+  NR: "Nauru",
+  TV: "Tuvalu",
+  AO: "Angola",
+  BW: "Botswana",
+  NA: "Namibia",
+  SZ: "Eswatini",
+  LS: "Lesotho",
+  MG: "Madagascar",
+  MU: "Mauritius",
+  SC: "Seychelles",
+  KM: "Comoros",
+  DJ: "Djibouti",
+  ER: "Eritrea",
+  GA: "Gabon",
+  GQ: "Equatorial Guinea",
+  CG: "Republic of the Congo",
+  CD: "Democratic Republic of the Congo",
+  CF: "Central African Republic",
+  TD: "Chad",
+  NE: "Niger",
+  ML: "Mali",
+  BF: "Burkina Faso",
+  GN: "Guinea",
+  GW: "Guinea-Bissau",
+  SL: "Sierra Leone",
+  LR: "Liberia",
+  TG: "Togo",
+  BJ: "Benin",
+  MR: "Mauritania",
+  GM: "Gambia",
+  CV: "Cape Verde",
+  ST: "Sao Tome and Principe",
+  BI: "Burundi",
+  MW: "Malawi",
+};
 
 const CRITICAL = [
   "earthquake",
@@ -61,12 +353,8 @@ function timeAgo(dateStr: string) {
   return `${Math.round(diff / 86400)}d ago`;
 }
 
-async function fetchNews(member: Member) {
-  const q = encodeURIComponent(member.city);
-  const url = `https://content.guardianapis.com/search?q=${q}&api-key=test&show-fields=trailText&page-size=6&order-by=newest`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return (data.response?.results || []).map((item: any) => ({
+function mapGuardianResults(json: any) {
+  return (json.response?.results || []).map((item: any) => ({
     title: item.webTitle,
     section: item.sectionName,
     link: item.webUrl,
@@ -74,6 +362,47 @@ async function fetchNews(member: Member) {
     desc: item.fields?.trailText?.replace(/<[^>]+>/g, "") || "",
     level: classify(item.webTitle, item.fields?.trailText || ""),
   }));
+}
+
+async function fetchGuardian(url: string) {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return mapGuardianResults(data);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchNews(member: Member) {
+  const tag = COUNTRY_TAG[member.country];
+  const name = COUNTRY_NAME[member.country];
+
+  let primaryUrl: string;
+  if (tag) {
+    primaryUrl = `https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+  } else if (name) {
+    const q = encodeURIComponent(`"${name}"`);
+    primaryUrl = `https://content.guardianapis.com/search?q=${q}&section=world&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+  } else {
+    primaryUrl = `https://content.guardianapis.com/search?q=${encodeURIComponent(member.country)}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+  }
+
+  let results = await fetchGuardian(primaryUrl);
+
+  if (results.length < 5 && member.city) {
+    const cityUrl = `https://content.guardianapis.com/search?q=${encodeURIComponent(`"${member.city}"`)}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`;
+    const supplemental = await fetchGuardian(cityUrl);
+    const seen = new Set(results.map((r: any) => r.link));
+    for (const item of supplemental) {
+      if (!seen.has(item.link)) {
+        results.push(item);
+        seen.add(item.link);
+      }
+    }
+  }
+
+  return results;
 }
 
 export default function NewsScreen() {
@@ -84,38 +413,49 @@ export default function NewsScreen() {
 
   useEffect(() => {
     if (!members[active]) return;
+    const member = members[active];
     setLoading(true);
     setNews([]);
-    fetchNews(members[active])
-      .then((items) => {
-        setNews(
-          items.sort(
-            (a: any, b: any) =>
-              ({ critical: 0, important: 1, normal: 2 })[a.level as string]! -
-              { critical: 0, important: 1, normal: 2 }[b.level as string]!,
-          ),
-        );
-      })
-      .finally(() => setLoading(false));
-    const t = setInterval(
-      () => fetchNews(members[active]).then(setNews),
-      90000,
-    );
+
+    const rank: Record<string, number> = { critical: 0, important: 1, normal: 2 };
+
+    const sortItems = (items: any[]) =>
+      items.sort((a: any, b: any) => {
+        const r = (rank[a.level] ?? 2) - (rank[b.level] ?? 2);
+        if (r !== 0) return r;
+        return new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
+      });
+
+    const load = async () => {
+      const items = await fetchNews(member);
+      const sorted = sortItems(items);
+      setNews(sorted);
+      const SEEN_KEY = `ensemble_seen_news_${members[active]?.id}`;
+      const seenRaw = await AsyncStorage.getItem(SEEN_KEY);
+      const seenSet = new Set<string>(seenRaw ? JSON.parse(seenRaw) : []);
+      const newCritical = sorted.filter(a => a.level === 'critical' && !seenSet.has(a.link));
+      for (const article of newCritical) {
+        seenSet.add(article.link);
+        notifyCritical(member, { title: article.title, link: article.link, desc: article.desc }).catch(() => {});
+      }
+      await AsyncStorage.setItem(SEEN_KEY, JSON.stringify([...seenSet].slice(-300)));
+    };
+
+    load().finally(() => setLoading(false));
+    const t = setInterval(() => {
+      load().catch(() => {});
+    }, 60000);
     return () => clearInterval(t);
   }, [active, members.length]);
 
-  const borderColor = (level: string) =>
-    level === "critical"
-      ? "#ef4444"
-      : level === "important"
-        ? "#f59e0b"
-        : "rgba(255,255,255,0.12)";
+  const cardBorderColor = (level: string) =>
+    level === "critical" ? "#ef4444" :
+    level === "important" ? "#f59e0b" :
+    "rgba(34,197,94,0.45)";
   const titleColor = (level: string) =>
-    level === "critical"
-      ? "#fca5a5"
-      : level === "important"
-        ? "#fde68a"
-        : "rgba(255,255,255,0.9)";
+    level === "critical" ? "#fca5a5" :
+    level === "important" ? "#fde68a" :
+    "rgba(255,255,255,0.9)";
 
   return (
     <View style={s.root}>
@@ -136,7 +476,13 @@ export default function NewsScreen() {
             onPress={() => setActive(i)}
             style={[s.tab, active === i && s.tabActive]}
           >
-            <Text style={s.tabEmoji}>{m.emoji}</Text>
+            {m.photoUri ? (
+              <Image source={{ uri: m.photoUri }} style={s.tabAvatar} />
+            ) : (
+              <View style={[s.tabAvatar, { backgroundColor: getAvatarColor(m.id) }]}>
+                <Text style={s.tabAvatarInitial}>{m.name[0].toUpperCase()}</Text>
+              </View>
+            )}
             <Text style={[s.tabName, active === i && s.tabNameActive]}>
               {m.name}
             </Text>
@@ -164,16 +510,11 @@ export default function NewsScreen() {
         {news.map((article, i) => (
           <TouchableOpacity
             key={i}
-            style={[s.card, { borderLeftColor: borderColor(article.level) }]}
+            style={[s.card, { borderColor: cardBorderColor(article.level), borderWidth: article.level !== 'normal' ? 2 : 1 }]}
             onPress={() => Linking.openURL(article.link)}
           >
             <Text style={s.section}>{article.section}</Text>
             <Text style={[s.title, { color: titleColor(article.level) }]}>
-              {article.level === "critical"
-                ? "🚨 "
-                : article.level === "important"
-                  ? "📌 "
-                  : ""}
               {article.title}
             </Text>
             {article.desc ? (
@@ -183,7 +524,7 @@ export default function NewsScreen() {
             ) : null}
             <View style={s.meta}>
               <Text style={s.source}>The Guardian</Text>
-              <Text style={s.dot}>·</Text>
+              <Text style={s.metaDot}>·</Text>
               <Text style={s.ago}>{timeAgo(article.pubDate)}</Text>
             </View>
           </TouchableOpacity>
@@ -215,7 +556,19 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(124,106,247,0.4)",
   },
-  tabEmoji: { fontSize: 16 },
+  tabAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  tabAvatarInitial: {
+    color: "white",
+    fontWeight: "700",
+    fontSize: 11,
+  },
   tabName: { fontSize: 13, fontWeight: "600", color: "rgba(255,255,255,0.45)" },
   tabNameActive: { color: "#c4b5fd" },
   liveBadge: {
@@ -258,7 +611,7 @@ const s = StyleSheet.create({
   },
   meta: { flexDirection: "row", alignItems: "center", gap: 5 },
   source: { fontSize: 11, fontWeight: "700", color: "#a78bfa" },
-  dot: { color: "rgba(255,255,255,0.25)", fontSize: 10 },
+  metaDot: { color: "rgba(255,255,255,0.25)", fontSize: 10 },
   ago: { fontSize: 11, color: "rgba(255,255,255,0.35)" },
   empty: {
     textAlign: "center",
