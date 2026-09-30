@@ -50,7 +50,7 @@ function timeLabel(iso: string) {
 }
 
 function storageKey(id: number) {
-  return `ensemble_chat_${id}`;
+  return `instereo_chat_${id}`;
 }
 
 async function loadMessages(id: number): Promise<Message[]> {

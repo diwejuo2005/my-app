@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Firestore security rules for Ensemble.
+// Firestore security rules for inStereo.
 //
 // This file isn't wired up to a Firebase CLI project in this repo (no
 // firebase.json/.firebaserc), so it isn't auto-deployed — copy it into

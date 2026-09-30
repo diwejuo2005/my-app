@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Firebase Storage security rules for Ensemble.
+// Firebase Storage security rules for inStereo.
 //
 // Same situation as firestore.rules: not wired to a Firebase CLI project in
 // this repo, so paste this into Firebase Console → Storage → Rules → Publish.

@@ -25,7 +25,7 @@ type Moment = {
 
 type MomentsMap = Record<string, Moment[]>;
 
-const STORAGE_KEY = "ensemble_moments";
+const STORAGE_KEY = "instereo_moments";
 
 const AVATAR_COLORS = [
   "#2d3a5a",

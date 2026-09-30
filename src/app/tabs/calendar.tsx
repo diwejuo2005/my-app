@@ -46,8 +46,8 @@ type CalendarEvent = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "ensemble_calendar";
-const VISIBILITY_KEY = "ensemble_calendar_visibility";
+const STORAGE_KEY = "instereo_calendar";
+const VISIBILITY_KEY = "instereo_calendar_visibility";
 
 const EVENT_COLORS = [
   "#7c6af7",
@@ -1261,7 +1261,7 @@ function SyncHelpModal({
           </View>
           <Text style={shm.title}>Sync Your Google Calendar</Text>
           <Text style={shm.subtitle}>
-            Connect Google to iOS Calendar so Ensemble can read your events.
+            Connect Google to iOS Calendar so inStereo can read your events.
             This is a one-time setup — do it once and it syncs automatically.
           </Text>
           <View style={shm.stepsCard}>
@@ -1605,7 +1605,7 @@ export default function CalendarScreen() {
       setDeviceEvents(mapped);
       setDeviceEventCount(mapped.length);
     } catch (err) {
-      console.warn("[Ensemble] Calendar sync error:", err);
+      console.warn("[inStereo] Calendar sync error:", err);
     } finally {
       setSyncLoading(false);
     }
@@ -1636,7 +1636,7 @@ export default function CalendarScreen() {
   function handleRevoke() {
     confirmAction(
       "Remove calendar sync?",
-      "Your device calendar events will be hidden from Ensemble. You can re-enable this at any time.",
+      "Your device calendar events will be hidden from inStereo. You can re-enable this at any time.",
       "Remove",
       () => {
         setPermissionGranted(false);

@@ -152,7 +152,7 @@ export default function TabLayout() {
                     letterSpacing: 0,
                   }}
                 >
-                  Ensemble
+                  inStereo
                 </Text>
                 <Text
                   style={{

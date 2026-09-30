@@ -37,7 +37,7 @@ function useSettings() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem("ensemble_settings").then((raw: string | null) => {
+    AsyncStorage.getItem("instereo_settings").then((raw: string | null) => {
       if (raw) {
         try {
           setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
@@ -52,7 +52,7 @@ function useSettings() {
   const update = (patch: Partial<Settings>) => {
     const next = { ...settings, ...patch };
     setSettings(next);
-    AsyncStorage.setItem("ensemble_settings", JSON.stringify(next));
+    AsyncStorage.setItem("instereo_settings", JSON.stringify(next));
   };
 
   return { settings, update, loaded };
@@ -183,7 +183,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footer}>Ensemble · v0.1</Text>
+        <Text style={styles.footer}>inStereo · v0.1</Text>
       </ScrollView>
 
       {/* Notifications Modal */}
@@ -312,7 +312,7 @@ export default function SettingsScreen() {
             />
           </View>
           <Text style={styles.modalHint}>
-            Helps us improve Ensemble. No personal data is ever shared.
+            Helps us improve inStereo. No personal data is ever shared.
           </Text>
           <TouchableOpacity
             style={[styles.modalDoneBtn, { backgroundColor: accent }]}

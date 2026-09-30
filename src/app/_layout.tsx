@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from "react-native";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MembersProvider } from "../context/MembersContext";
 import { createUserProfile, UserProfile, watchUserProfile } from "../lib/firestore";
+import { migrateLegacyStorageKeys } from "../lib/migrateStorage";
 
 const PENDING_INVITE_KEY = "pendingInviteId";
 
@@ -72,6 +73,18 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
+  // Screens read local storage on mount, so finish renaming legacy keys first.
+  const [storageReady, setStorageReady] = useState(false);
+  useEffect(() => {
+    migrateLegacyStorageKeys()
+      .catch((err) => console.warn("[inStereo] Storage migration failed:", err))
+      .finally(() => setStorageReady(true));
+  }, []);
+
+  if (!storageReady) {
+    return <View style={{ flex: 1, backgroundColor: "#07080f" }} />;
+  }
+
   return (
     <AuthProvider>
       <MembersProvider>

@@ -71,7 +71,7 @@ export default function LoginScreen() {
       <StatusBar barStyle="light-content" />
 
       <View style={s.top}>
-        <Text style={s.wordmark}>Ensemble</Text>
+        <Text style={s.wordmark}>inStereo</Text>
         <Text style={s.tagline}>Stay close, no matter the distance.</Text>
       </View>
 
@@ -149,7 +149,7 @@ export default function LoginScreen() {
       </View>
 
       <Text style={s.footer}>
-        By continuing you agree to Ensemble's Terms & Privacy Policy.
+        By continuing you agree to inStereo's Terms & Privacy Policy.
       </Text>
     </KeyboardAvoidingView>
   );

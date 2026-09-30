@@ -160,7 +160,7 @@ export default function ConnectionsScreen() {
         setInviteUrl(url);
       } else {
         await Share.share({
-          message: `Join me on Ensemble! Tap this link to connect: ${url}`,
+          message: `Join me on inStereo! Tap this link to connect: ${url}`,
           url,
         });
       }

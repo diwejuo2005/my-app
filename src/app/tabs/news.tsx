@@ -430,7 +430,7 @@ export default function NewsScreen() {
       const items = await fetchNews(member);
       const sorted = sortItems(items);
       setNews(sorted);
-      const SEEN_KEY = `ensemble_seen_news_${members[active]?.id}`;
+      const SEEN_KEY = `instereo_seen_news_${members[active]?.id}`;
       const seenRaw = await AsyncStorage.getItem(SEEN_KEY);
       const seenSet = new Set<string>(seenRaw ? JSON.parse(seenRaw) : []);
       const newCritical = sorted.filter(a => a.level === 'critical' && !seenSet.has(a.link));

@@ -1,11 +1,10 @@
 {
-  "name": "ensemble",
+  "name": "instereo",
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start --tunnel",
     "start:lan": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --tunnel --android",
     "ios": "expo start --tunnel --ios",
     "web": "expo start --web",

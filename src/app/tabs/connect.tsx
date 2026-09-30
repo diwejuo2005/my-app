@@ -18,9 +18,9 @@ import { updateUserProfile } from "../../lib/firestore";
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
-const MY_MOOD_KEY = "ensemble_my_mood";
-const MY_NOTES_KEY = "ensemble_my_notes";
-const REMINDER_KEY = "ensemble_mood_reminder";
+const MY_MOOD_KEY = "instereo_my_mood";
+const MY_NOTES_KEY = "instereo_my_notes";
+const REMINDER_KEY = "instereo_mood_reminder";
 type MoodMap = Record<string, number>; // YYYY-MM-DD → 1-5
 type NotesMap = Record<string, string>; // weekStartISO → string
 
@@ -285,7 +285,7 @@ function MyMoodTab() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status === "granted") {
         await Notifications.scheduleNotificationAsync({
-          content: { title: "Ensemble", body: "How are you feeling today?" },
+          content: { title: "inStereo", body: "How are you feeling today?" },
           trigger: { type: "daily", hour: 20, minute: 0 } as Parameters<typeof Notifications.scheduleNotificationAsync>[0]["trigger"],
         });
       }

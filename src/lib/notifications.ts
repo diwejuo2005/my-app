@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Member } from '../context/MembersContext';
 
-const SEEN_KEY = 'ensemble_seen_alerts';
+const SEEN_KEY = 'instereo_seen_alerts';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -50,7 +50,7 @@ function isDangerous(title: string, desc: string): boolean {
 }
 
 export async function notifyCritical(member: Member, article: { title: string; link: string; desc: string }) {
-  const settingsRaw = await AsyncStorage.getItem('ensemble_settings');
+  const settingsRaw = await AsyncStorage.getItem('instereo_settings');
   if (settingsRaw) {
     try {
       const settings = JSON.parse(settingsRaw);
@@ -83,7 +83,7 @@ export async function notifyCritical(member: Member, article: { title: string; l
 }
 
 export async function notifyBirthday(member: Member, type: 'birthday' | 'anniversary') {
-  const settingsRaw = await AsyncStorage.getItem('ensemble_settings');
+  const settingsRaw = await AsyncStorage.getItem('instereo_settings');
   if (settingsRaw) {
     try {
       const s = JSON.parse(settingsRaw);
@@ -99,7 +99,7 @@ export async function notifyBirthday(member: Member, type: 'birthday' | 'anniver
   const label = type === 'birthday' ? `Today is ${member.name}'s birthday!` : `${member.name}'s anniversary is today!`;
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Ensemble Reminder',
+      title: 'inStereo Reminder',
       body: label,
       data: { memberId: member.id, type },
     },

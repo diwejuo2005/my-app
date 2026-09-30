@@ -1061,7 +1061,7 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
   const [editVisible, setEditVisible] = useState(false);
 
   function confirmDelete() {
-    confirmAction('Remove Person', `Remove ${member.name} from Ensemble?`, 'Remove', () => {
+    confirmAction('Remove Person', `Remove ${member.name} from inStereo?`, 'Remove', () => {
       onClose();
       onDelete(member.id);
     });
