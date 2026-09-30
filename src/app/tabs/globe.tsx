@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useMemo, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -11,7 +12,6 @@ import {
   View,
 } from "react-native";
 import WebView from "react-native-webview";
-import { Ionicons } from "@expo/vector-icons";
 import { Member, useMembers } from "../../context/MembersContext";
 
 // ─── Flat-map fallback (used when globe.gl CDN is unreachable) ──────────────
@@ -299,7 +299,7 @@ export default function GlobeScreen() {
       } else if (msg.type === "pin-click") {
         setSelectedCity({ city: msg.city, memberIds: msg.memberIds });
       }
-    } catch {}
+    } catch { }
   }
 
   return (

@@ -14,59 +14,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useAuth } from "../../context/AuthContext";
-import { Member } from "../../context/MembersContext";
-import { Connection, ProfileSnapshot, watchConnectionsWithProfiles } from "../../lib/firestore";
+import { Member, useMembers } from "../../context/MembersContext";
 import { notifyBirthday } from "../../lib/notifications";
 import PersonDetail from "../../components/PersonDetail";
-
-function uidToNum(uid: string): number {
-  let h = 0;
-  for (let i = 0; i < uid.length; i++) h = Math.imul(31, h) + uid.charCodeAt(i) | 0;
-  return Math.abs(h);
-}
-
-function profileToMember(
-  profile: ProfileSnapshot,
-  connection: Connection,
-  myUid: string
-): Member {
-  return {
-    id: uidToNum(profile.uid),
-    uid: profile.uid,
-    name: profile.name,
-    relationship: connection.labels?.[myUid] ?? "Connection",
-    photoUri: profile.photoUrl ?? undefined,
-    city: profile.city,
-    country: profile.country,
-    timezone: profile.timezone || "UTC",
-    lat: profile.lat ?? 0,
-    lon: profile.lon ?? 0,
-    wakeHour: profile.wakeHour ?? 7,
-    sleepHour: profile.sleepHour ?? 22,
-  };
-}
-
-function useFirebaseMembers() {
-  const { user } = useAuth();
-  const [members, setMembers] = useState<Member[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) { setLoading(false); return; }
-    const unsub = watchConnectionsWithProfiles(user.uid, (items) => {
-      // Show both accepted and pending_label so both users see each other immediately after invite
-      const connected = items.filter(
-        (i) => i.connection.status === "accepted" || i.connection.status === "pending_label"
-      );
-      setMembers(connected.map(({ connection, profile }) => profileToMember(profile, connection, user.uid)));
-      setLoading(false);
-    });
-    return unsub;
-  }, [user?.uid]);
-
-  return { members, loading };
-}
 
 const GRADIENTS: Record<string, [string, string]> = {
   night: ["#060810", "#0c0e1a"],
@@ -270,7 +220,7 @@ function FamilyCard({ member, tick, onView }: { member: Member; tick: number; on
 }
 
 export default function HomeScreen() {
-  const { members, loading: membersLoading } = useFirebaseMembers();
+  const { members, loading: membersLoading } = useMembers();
   const router = useRouter();
   const [tick, setTick] = useState(0);
   const [viewingMember, setViewingMember] = useState<Member | null>(null);

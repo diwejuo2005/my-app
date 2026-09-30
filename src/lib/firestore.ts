@@ -1,10 +1,12 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -18,11 +20,29 @@ import { db } from "../config/firebase";
 // Types
 // ---------------------------------------------------------------------------
 
+export type ImportantDate = { label: string; date: string }; // date: "YYYY-MM-DD"
+
+export type CalendarVisibility = "full" | "availability" | "hidden";
+
+export type SharedCalendarEvent = {
+  id: string;
+  title: string;
+  date: string; // "YYYY-MM-DD"
+  startTime: string; // "HH:MM" 24h
+  endTime: string; // "HH:MM" 24h
+  color: string;
+  notes?: string;
+};
+
 export type UserProfile = {
   uid: string;
   email: string;
   name: string;
   photoUrl: string | null;
+  bio: string;
+  // Not part of ProfileSnapshot — private to the owner, never shared with connections.
+  phone: string;
+  pronouns: string;
   city: string;
   country: string;
   countryCode: string;
@@ -31,6 +51,16 @@ export type UserProfile = {
   lon: number;
   wakeHour: number;
   sleepHour: number;
+  birthday: string;    // "YYYY-MM-DD"
+  anniversary: string; // "YYYY-MM-DD"
+  hometown: string;
+  occupation: string;
+  importantDates: ImportantDate[];
+  pulseScores: Record<string, number>; // "YYYY-MM-DD" -> 1-5, current week only
+  weeklyNote: string;
+  // Same visibility level applied to every connection — not per-connection.
+  calendarVisibility: CalendarVisibility;
+  calendarEvents: SharedCalendarEvent[]; // already redacted per calendarVisibility before being stored
   onboardingComplete: boolean;
   createdAt: any;
 };
@@ -43,6 +73,7 @@ export type ProfileSnapshot = {
   uid: string;
   name: string;
   photoUrl: string | null;
+  bio: string;
   city: string;
   country: string;
   timezone: string;
@@ -50,10 +81,21 @@ export type ProfileSnapshot = {
   lon: number;
   wakeHour: number;
   sleepHour: number;
+  birthday: string;
+  anniversary: string;
+  hometown: string;
+  occupation: string;
+  importantDates: ImportantDate[];
+  pulseScores: Record<string, number>;
+  weeklyNote: string;
+  calendarVisibility: CalendarVisibility;
+  calendarEvents: SharedCalendarEvent[];
 };
 
 const SNAPSHOT_FIELDS: Array<keyof ProfileSnapshot> = [
-  "name", "photoUrl", "city", "country", "timezone", "lat", "lon", "wakeHour", "sleepHour",
+  "name", "photoUrl", "bio", "city", "country", "timezone", "lat", "lon", "wakeHour", "sleepHour",
+  "birthday", "anniversary", "hometown", "occupation", "importantDates", "pulseScores", "weeklyNote",
+  "calendarVisibility", "calendarEvents",
 ];
 
 export function toProfileSnapshot(profile: UserProfile): ProfileSnapshot {
@@ -61,6 +103,7 @@ export function toProfileSnapshot(profile: UserProfile): ProfileSnapshot {
     uid: profile.uid,
     name: profile.name,
     photoUrl: profile.photoUrl,
+    bio: profile.bio ?? "",
     city: profile.city,
     country: profile.country,
     timezone: profile.timezone,
@@ -68,6 +111,15 @@ export function toProfileSnapshot(profile: UserProfile): ProfileSnapshot {
     lon: profile.lon,
     wakeHour: profile.wakeHour,
     sleepHour: profile.sleepHour,
+    birthday: profile.birthday ?? "",
+    anniversary: profile.anniversary ?? "",
+    hometown: profile.hometown ?? "",
+    occupation: profile.occupation ?? "",
+    importantDates: profile.importantDates ?? [],
+    pulseScores: profile.pulseScores ?? {},
+    weeklyNote: profile.weeklyNote ?? "",
+    calendarVisibility: profile.calendarVisibility ?? "full",
+    calendarEvents: profile.calendarEvents ?? [],
   };
 }
 
@@ -106,10 +158,24 @@ export async function createUserProfile(uid: string, email: string) {
       email,
       name: "",
       photoUrl: null,
+      bio: "",
+      phone: "",
+      pronouns: "",
       city: "",
       country: "",
       countryCode: "",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      wakeHour: 7,
+      sleepHour: 22,
+      birthday: "",
+      anniversary: "",
+      hometown: "",
+      occupation: "",
+      importantDates: [],
+      pulseScores: {},
+      weeklyNote: "",
+      calendarVisibility: "full",
+      calendarEvents: [],
       onboardingComplete: false,
       createdAt: serverTimestamp(),
     });
@@ -276,4 +342,59 @@ export function watchConnectionsWithProfiles(
     const connections = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Connection));
     cb(connectionsToProfiles(connections, uid));
   });
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
+
+export type ChatMessage = {
+  id: string;
+  senderId: string;
+  text: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  audioUrl: string | null;
+  timestamp: any;
+  editedAt?: any;
+};
+
+// Deterministic from the two participants' uids alone, so security rules
+// can validate access from the chat ID itself with no extra document reads.
+export function chatIdFor(uidA: string, uidB: string): string {
+  return [uidA, uidB].sort().join("_");
+}
+
+export function watchMessages(chatId: string, cb: (messages: ChatMessage[]) => void) {
+  const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChatMessage)));
+  });
+}
+
+export async function sendMessage(
+  chatId: string,
+  senderId: string,
+  data: { text?: string; imageUrl?: string; videoUrl?: string; audioUrl?: string }
+): Promise<string> {
+  const ref = await addDoc(collection(db, "chats", chatId, "messages"), {
+    senderId,
+    text: data.text ?? "",
+    imageUrl: data.imageUrl ?? null,
+    videoUrl: data.videoUrl ?? null,
+    audioUrl: data.audioUrl ?? null,
+    timestamp: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function editMessage(chatId: string, messageId: string, text: string) {
+  await updateDoc(doc(db, "chats", chatId, "messages", messageId), {
+    text,
+    editedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteMessage(chatId: string, messageId: string) {
+  await deleteDoc(doc(db, "chats", chatId, "messages", messageId));
 }

@@ -1,9 +1,11 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { Stack } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import { Member, useMembers } from "../context/MembersContext";
+import { updateUserProfile, watchUserProfile } from "../lib/firestore";
+import { uploadProfilePhoto } from "../lib/storage";
 import {
   Alert,
   Image,
@@ -18,20 +20,6 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
-type UserProfile = {
-  name: string;
-  photoUri?: string;
-  bio: string;
-  city: string;
-  birthday: string;
-  phone: string;
-  email: string;
-  hometown: string;
-  pronouns: string;
-  wakeHour: number;  // 0–23
-  sleepHour: number; // 0–23
-};
 
 type UpcomingDate = { name: string; type: string; date: Date; daysAway: number };
 
@@ -64,8 +52,6 @@ function getUpcomingDates(members: Member[]): UpcomingDate[] {
   }
   return results.sort((a, b) => a.daysAway - b.daysAway);
 }
-
-const STORAGE_KEY = "ensemble_user_profile";
 
 function fmt12(h24: number): string {
   const isPM = h24 >= 12;
@@ -122,7 +108,9 @@ function HourPicker({
 export default function ProfileScreen() {
   const { members } = useMembers();
   const [name, setName] = useState("");
-  const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
+  const { user } = useAuth();
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [pickedLocalUri, setPickedLocalUri] = useState<string | null>(null);
   const [bio, setBio] = useState("");
   const [city, setCity] = useState("");
   const [birthday, setBirthday] = useState("");
@@ -133,27 +121,27 @@ export default function ProfileScreen() {
   const [wakeHour, setWakeHour] = useState(7);
   const [sleepHour, setSleepHour] = useState(23);
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const upcomingDates = useMemo(() => getUpcomingDates(members), [members]);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
-      if (raw) {
-        const p: UserProfile = JSON.parse(raw);
-        setName(p.name || "");
-        setPhotoUri(p.photoUri);
-        setBio(p.bio || "");
-        setCity(p.city || "");
-        setBirthday(p.birthday || "");
-        setPhone(p.phone || "");
-        setEmail(p.email || "");
-        setHometown(p.hometown || "");
-        setPronouns(p.pronouns || "");
-        setWakeHour(typeof p.wakeHour === "number" ? p.wakeHour : 7);
-        setSleepHour(typeof p.sleepHour === "number" ? p.sleepHour : 23);
-      }
+    if (!user) return;
+    return watchUserProfile(user.uid, (p) => {
+      if (!p) return;
+      setName(p.name || "");
+      setPhotoUrl(p.photoUrl);
+      setBio(p.bio || "");
+      setCity(p.city || "");
+      setBirthday(p.birthday || "");
+      setPhone(p.phone || "");
+      setEmail(p.email || "");
+      setHometown(p.hometown || "");
+      setPronouns(p.pronouns || "");
+      setWakeHour(typeof p.wakeHour === "number" ? p.wakeHour : 7);
+      setSleepHour(typeof p.sleepHour === "number" ? p.sleepHour : 23);
     });
-  }, []);
+  }, [user?.uid]);
 
   async function pickPhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -163,33 +151,44 @@ export default function ProfileScreen() {
       quality: 0.7,
     });
     if (!result.canceled && result.assets.length > 0) {
-      setPhotoUri(result.assets[0].uri);
+      setPickedLocalUri(result.assets[0].uri);
     }
   }
 
   async function save() {
+    if (!user) return;
     if (!name.trim()) {
       Alert.alert("Please enter your name");
       return;
     }
-    const profile: UserProfile = {
-      name: name.trim(),
-      photoUri,
-      bio: bio.trim(),
-      city: city.trim(),
-      birthday,
-      phone: phone.trim(),
-      email: email.trim(),
-      hometown: hometown.trim(),
-      pronouns: pronouns.trim(),
-      wakeHour,
-      sleepHour,
-    };
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-    Alert.alert("Profile saved");
+    setSaving(true);
+    try {
+      const uploadedUrl = pickedLocalUri ? await uploadProfilePhoto(user.uid, pickedLocalUri) : photoUrl;
+      await updateUserProfile(user.uid, {
+        name: name.trim(),
+        photoUrl: uploadedUrl,
+        bio: bio.trim(),
+        city: city.trim(),
+        birthday,
+        phone: phone.trim(),
+        email: email.trim(),
+        hometown: hometown.trim(),
+        pronouns: pronouns.trim(),
+        wakeHour,
+        sleepHour,
+      });
+      setPhotoUrl(uploadedUrl);
+      setPickedLocalUri(null);
+      Alert.alert("Profile saved");
+    } catch {
+      Alert.alert("Error", "Could not save your profile. Try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const initials = name.trim() ? name.trim()[0].toUpperCase() : "?";
+  const displayedPhoto = pickedLocalUri || photoUrl || undefined;
 
   return (
     <>
@@ -214,8 +213,8 @@ export default function ProfileScreen() {
         >
           {/* Avatar */}
           <TouchableOpacity style={s.avatarWrap} onPress={pickPhoto}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={s.avatar} />
+            {displayedPhoto ? (
+              <Image source={{ uri: displayedPhoto }} style={s.avatar} />
             ) : (
               <View style={[s.avatar, s.avatarPlaceholder]}>
                 <Text style={s.avatarInitial}>{initials}</Text>
@@ -389,8 +388,8 @@ export default function ProfileScreen() {
           )}
 
           {/* Save */}
-          <TouchableOpacity style={s.saveBtn} onPress={save}>
-            <Text style={s.saveBtnText}>Save Profile</Text>
+          <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+            <Text style={s.saveBtnText}>{saving ? "Saving…" : "Save Profile"}</Text>
           </TouchableOpacity>
 
           <View style={{ height: 60 }} />

@@ -53,5 +53,19 @@ service cloud.firestore {
         && request.auth.uid in resource.data.users;
       allow delete: if false;
     }
+
+    // chats/{chatId}/messages/{messageId} — chatId is "<uidA>_<uidB>" sorted,
+    // so membership is derived from the ID itself with no lookup needed.
+    // Only the two participants can read the thread or send into it; a
+    // message can only ever be edited/deleted by whoever sent it.
+    match /chats/{chatId}/messages/{messageId} {
+      allow read: if request.auth != null && request.auth.uid in chatId.split('_');
+      allow create: if request.auth != null
+        && request.auth.uid in chatId.split('_')
+        && request.resource.data.senderId == request.auth.uid;
+      allow update, delete: if request.auth != null
+        && request.auth.uid in chatId.split('_')
+        && resource.data.senderId == request.auth.uid;
+    }
   }
 }

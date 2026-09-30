@@ -13,6 +13,8 @@ import {
   View,
 } from "react-native";
 import * as Notifications from "expo-notifications";
+import { useAuth } from "../../context/AuthContext";
+import { updateUserProfile } from "../../lib/firestore";
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
@@ -218,6 +220,7 @@ const stat = StyleSheet.create({
 // ─── Tab 1: My Mood ───────────────────────────────────────────────────────────
 
 function MyMoodTab() {
+  const { user } = useAuth();
   const [moodMap, setMoodMap] = useState<MoodMap>({});
   const [notesMap, setNotesMap] = useState<NotesMap>({});
   const [reminderOn, setReminderOn] = useState(false);
@@ -265,9 +268,11 @@ function MyMoodTab() {
     const newMap: MoodMap = { ...moodMap, [day]: score };
     setMoodMap(newMap);
     await AsyncStorage.setItem(MY_MOOD_KEY, JSON.stringify(newMap));
+    if (user) updateUserProfile(user.uid, { pulseScores: newMap });
   }
 
   async function saveNote() {
+    if (user) updateUserProfile(user.uid, { weeklyNote: noteText });
     const newMap: NotesMap = { ...notesMap, [weekStart]: noteText };
     setNotesMap(newMap);
     await AsyncStorage.setItem(MY_NOTES_KEY, JSON.stringify(newMap));
@@ -412,7 +417,7 @@ const mood = StyleSheet.create({
     lineHeight: 20,
     minHeight: 80,
     textAlignVertical: "top",
-    paddingTop: 0,
+    paddingVertical: 8,
   },
   reminderRow: {
     flexDirection: "row",

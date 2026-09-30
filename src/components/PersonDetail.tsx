@@ -4,7 +4,7 @@ import { AudioModule, createAudioPlayer, RecordingPresets, setAudioModeAsync, us
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,7 +23,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useAuth } from '../context/AuthContext';
+import { confirmAction } from '../lib/confirm';
 import { Member } from '../context/MembersContext';
+import { ChatMessage, chatIdFor, deleteMessage, editMessage, sendMessage, watchMessages } from '../lib/firestore';
+import { uploadChatMedia } from '../lib/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,16 +37,6 @@ type Props = {
   onClose: () => void;
   onUpdate: (updated: Member) => void;
   onDelete: (id: number) => void;
-};
-
-type Message = {
-  id: string;
-  text: string;
-  imageUri?: string;
-  videoUri?: string;
-  audioUri?: string;
-  timestamp: string;
-  sent: boolean;
 };
 
 type NewsArticle = {
@@ -361,13 +355,15 @@ function ZoomVideoPlayer({ uri }: { uri: string }) {
 // ─── CHAT TAB ─────────────────────────────────────────────────────────────────
 
 function ChatTab({ member }: { member: Member }) {
-  const storageKey = `ensemble_chat_${member.id}`;
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { user } = useAuth();
+  const chatId = user ? chatIdFor(user.uid, member.uid) : null;
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [zoomVideo, setZoomVideo] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [uploading, setUploading] = useState(false);
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);
   const [kbHeight, setKbHeight] = useState(0);
@@ -383,34 +379,38 @@ function ChatTab({ member }: { member: Member }) {
   }, []);
 
   useEffect(() => {
-    AsyncStorage.getItem(storageKey).then((raw) => {
-      if (raw) { try { setMessages(JSON.parse(raw)); } catch {} }
+    if (!chatId) return;
+    const unsub = watchMessages(chatId, (msgs) => {
+      setMessages(msgs);
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 50);
     });
-  }, [member.id]);
-
-  async function saveMessages(msgs: Message[]) {
-    setMessages(msgs);
-    await AsyncStorage.setItem(storageKey, JSON.stringify(msgs));
-  }
+    return unsub;
+  }, [chatId]);
 
   function sendText() {
-    if (!text.trim()) return;
-    const msg: Message = { id: Date.now().toString(), text: text.trim(), timestamp: new Date().toISOString(), sent: true };
-    saveMessages([...messages, msg]);
+    if (!text.trim() || !user || !chatId) return;
+    sendMessage(chatId, user.uid, { text: text.trim() });
     setText('');
     setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
   async function pickMedia(type: 'image' | 'video') {
+    if (!user || !chatId) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: type === 'image' ? ImagePicker.MediaTypeOptions.Images : ImagePicker.MediaTypeOptions.Videos,
       allowsEditing: false, quality: 0.8,
     });
     if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
-      const msg: Message = { id: Date.now().toString(), text: '', timestamp: new Date().toISOString(), sent: true, ...(type === 'image' ? { imageUri: asset.uri } : { videoUri: asset.uri }) };
-      saveMessages([...messages, msg]);
-      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      setUploading(true);
+      try {
+        const url = await uploadChatMedia(chatId, result.assets[0].uri, type);
+        await sendMessage(chatId, user.uid, type === 'image' ? { imageUrl: url } : { videoUrl: url });
+        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+      } catch {
+        Alert.alert('Error', `Could not send ${type}. Try again.`);
+      } finally {
+        setUploading(false);
+      }
     }
   }
 
@@ -426,38 +426,44 @@ function ChatTab({ member }: { member: Member }) {
   }
 
   async function stopRecording() {
+    if (!user || !chatId) return;
     try {
       await audioRecorder.stop();
       const uri = audioRecorder.uri;
       setIsRecording(false);
       if (uri) {
-        const msg: Message = { id: Date.now().toString(), text: '', audioUri: uri, timestamp: new Date().toISOString(), sent: true };
-        saveMessages([...messages, msg]);
-        setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+        setUploading(true);
+        try {
+          const url = await uploadChatMedia(chatId, uri, 'audio');
+          await sendMessage(chatId, user.uid, { audioUrl: url });
+          setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 100);
+        } finally {
+          setUploading(false);
+        }
       }
-    } catch {}
+    } catch { Alert.alert('Error', 'Could not send voice message.'); }
   }
 
-  function longPressMessage(item: Message) {
-    if (!item.sent) return;
+  function longPressMessage(item: ChatMessage) {
+    if (!chatId || item.senderId !== user?.uid) return;
     const opts: any[] = [];
     if (item.text) opts.push({ text: 'Edit', onPress: () => { setEditingId(item.id); setEditText(item.text); setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 150); } });
-    opts.push({ text: 'Delete', style: 'destructive', onPress: () => saveMessages(messages.filter(m => m.id !== item.id)) });
+    opts.push({ text: 'Delete', style: 'destructive', onPress: () => deleteMessage(chatId, item.id) });
     opts.push({ text: 'Cancel', style: 'cancel' });
     Alert.alert('Message', undefined, opts);
   }
 
   function saveEdit() {
-    if (!editText.trim()) return;
-    saveMessages(messages.map(m => m.id === editingId ? { ...m, text: editText.trim() } : m));
+    if (!editText.trim() || !chatId || !editingId) return;
+    editMessage(chatId, editingId, editText.trim());
     setEditingId(null);
     setEditText('');
   }
 
-  async function playAudio(uri: string) {
+  async function playAudio(url: string) {
     try {
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-      const player = createAudioPlayer(uri);
+      const player = createAudioPlayer(url);
       player.addListener('playbackStatusUpdate', (status) => {
         if (status.didJustFinish) player.remove();
       });
@@ -465,28 +471,29 @@ function ChatTab({ member }: { member: Member }) {
     } catch { Alert.alert('Could not play audio'); }
   }
 
-  function renderMessage({ item }: { item: Message }) {
+  function renderMessage({ item }: { item: ChatMessage }) {
     const isEditing = editingId === item.id;
+    const sent = item.senderId === user?.uid;
     return (
       <TouchableOpacity
-        style={[d.bubble, item.sent ? d.bubbleSent : d.bubbleReceived]}
+        style={[d.bubble, sent ? d.bubbleSent : d.bubbleReceived]}
         onLongPress={() => longPressMessage(item)}
         activeOpacity={0.85}
         delayLongPress={400}
       >
-        {item.imageUri ? (
-          <TouchableOpacity onPress={() => setZoomImage(item.imageUri!)}>
-            <Image source={{ uri: item.imageUri }} style={{ width: 200, height: 200, borderRadius: 12 }} resizeMode="cover" />
+        {item.imageUrl ? (
+          <TouchableOpacity onPress={() => setZoomImage(item.imageUrl!)}>
+            <Image source={{ uri: item.imageUrl }} style={{ width: 200, height: 200, borderRadius: 12 }} resizeMode="cover" />
           </TouchableOpacity>
         ) : null}
-        {item.videoUri ? (
-          <TouchableOpacity onPress={() => setZoomVideo(item.videoUri!)} style={{ width: 200, height: 140, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {item.videoUrl ? (
+          <TouchableOpacity onPress={() => setZoomVideo(item.videoUrl!)} style={{ width: 200, height: 140, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
             <Ionicons name="play-circle" size={48} color="rgba(255,255,255,0.85)" />
             <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginTop: 4 }}>Tap to play</Text>
           </TouchableOpacity>
         ) : null}
-        {item.audioUri ? (
-          <TouchableOpacity onPress={() => playAudio(item.audioUri!)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
+        {item.audioUrl ? (
+          <TouchableOpacity onPress={() => playAudio(item.audioUrl!)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 }}>
             <Ionicons name="play-circle" size={28} color="#a78bfa" />
             <Text style={{ color: '#a78bfa', fontSize: 13, fontWeight: '600' }}>Voice message</Text>
           </TouchableOpacity>
@@ -498,9 +505,9 @@ function ChatTab({ member }: { member: Member }) {
             <TouchableOpacity onPress={() => setEditingId(null)}><Ionicons name="close" size={18} color="rgba(255,255,255,0.5)" /></TouchableOpacity>
           </View>
         ) : item.text ? (
-          <Text style={[d.bubbleText, item.sent ? d.bubbleTextSent : d.bubbleTextReceived]}>{item.text}</Text>
+          <Text style={[d.bubbleText, sent ? d.bubbleTextSent : d.bubbleTextReceived]}>{item.text}</Text>
         ) : null}
-        <Text style={d.bubbleTime}>{timeAgo(item.timestamp)}</Text>
+        <Text style={d.bubbleTime}>{item.timestamp?.toDate ? timeAgo(item.timestamp.toDate().toISOString()) : ''}{item.editedAt ? ' · edited' : ''}</Text>
       </TouchableOpacity>
     );
   }
@@ -513,13 +520,13 @@ function ChatTab({ member }: { member: Member }) {
         ListEmptyComponent={<Text style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 60, fontSize: 14 }}>No messages yet</Text>}
       />
       <View style={d.inputRow}>
-        <TouchableOpacity onPress={() => pickMedia('image')} style={d.iconBtn}>
-          <Ionicons name="camera-outline" size={22} color="#a78bfa" />
+        <TouchableOpacity onPress={() => pickMedia('image')} style={d.iconBtn} disabled={uploading}>
+          {uploading ? <ActivityIndicator size="small" color="#a78bfa" /> : <Ionicons name="camera-outline" size={22} color="#a78bfa" />}
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => pickMedia('video')} style={d.iconBtn}>
+        <TouchableOpacity onPress={() => pickMedia('video')} style={d.iconBtn} disabled={uploading}>
           <Ionicons name="videocam-outline" size={22} color="#a78bfa" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={isRecording ? stopRecording : startRecording} style={[d.iconBtn, isRecording && { backgroundColor: 'rgba(239,68,68,0.2)' }]}>
+        <TouchableOpacity onPress={isRecording ? stopRecording : startRecording} style={[d.iconBtn, isRecording && { backgroundColor: 'rgba(239,68,68,0.2)' }]} disabled={uploading}>
           <Ionicons name={isRecording ? "stop-circle" : "mic-outline"} size={22} color={isRecording ? "#ef4444" : "#a78bfa"} />
         </TouchableOpacity>
         <TextInput style={d.chatInput} value={text} onChangeText={setText} placeholder="Message..." placeholderTextColor="rgba(255,255,255,0.3)" returnKeyType="send" onSubmitEditing={sendText} multiline={false} />
@@ -629,19 +636,9 @@ function ConnectionLineGraph({ scores }: { scores: Record<string, number> }) {
 // ─── PULSE TAB ────────────────────────────────────────────────────────────────
 
 function PulseTab({ member }: { member: Member }) {
-  const pulseKey = 'ensemble_pulse';
-  const notesKey = `ensemble_pulse_notes_${member.id}`;
-  const [pulseMap, setPulseMap] = useState<Record<string, Record<string, number>>>({});
-  const [notes, setNotes] = useState('');
   const days = currentWeekDays();
-  const memberScores: Record<string, number> = pulseMap[String(member.id)] || {};
-
-  useEffect(() => {
-    AsyncStorage.multiGet([pulseKey, notesKey]).then(([[, pulse], [, noteRaw]]) => {
-      if (pulse) { try { setPulseMap(JSON.parse(pulse)); } catch {} }
-      if (noteRaw) setNotes(noteRaw);
-    });
-  }, [member.id]);
+  const memberScores: Record<string, number> = member.pulseScores || {};
+  const notes = member.weeklyNote || '';
 
   const logged = days.filter((day) => memberScores[day] !== undefined);
   const avg =
@@ -947,36 +944,18 @@ function EditModal({
 
 // ─── SCHEDULE TAB ────────────────────────────────────────────────────────────
 
-function ScheduleTab() {
-  const [events, setEvents] = useState<CalEvent[]>([]);
-  const [visibility, setVisibility] = useState<CalVisibility>('full');
-  const [loading, setLoading] = useState(true);
+function ScheduleTab({ member }: { member: Member }) {
+  const visibility: CalVisibility = member.calendarVisibility ?? 'full';
 
-  useEffect(() => {
-    Promise.all([
-      AsyncStorage.getItem('ensemble_calendar'),
-      AsyncStorage.getItem('ensemble_calendar_visibility'),
-    ]).then(([localRaw, visRaw]) => {
-      const today = new Date().toISOString().split('T')[0];
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() + 30);
-      const cutoffStr = cutoff.toISOString().split('T')[0];
-
-      const localEvs: CalEvent[] = localRaw ? JSON.parse(localRaw) : [];
-      const all = [...localEvs];
-      const upcoming = all
-        .filter((e) => e.date >= today && e.date <= cutoffStr)
-        .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
-
-      setEvents(upcoming);
-      if (visRaw) setVisibility(visRaw as CalVisibility);
-      setLoading(false);
-    });
-  }, []);
-
-  if (loading) {
-    return <ActivityIndicator color="#a78bfa" style={{ marginTop: 40 }} />;
-  }
+  const events = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + 30);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    return (member.calendarEvents ?? [])
+      .filter((e) => e.date >= today && e.date <= cutoffStr)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  }, [member.calendarEvents]);
 
   if (visibility === 'hidden') {
     return (
@@ -1082,21 +1061,10 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
   const [editVisible, setEditVisible] = useState(false);
 
   function confirmDelete() {
-    Alert.alert(
-      'Remove Person',
-      `Remove ${member.name} from Ensemble?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            onClose();
-            onDelete(member.id);
-          },
-        },
-      ]
-    );
+    confirmAction('Remove Person', `Remove ${member.name} from Ensemble?`, 'Remove', () => {
+      onClose();
+      onDelete(member.id);
+    });
   }
 
   function handleUpdate(updated: Member) {
@@ -1151,7 +1119,7 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
           {activeTab === 'News' && <NewsTab member={member} />}
           {activeTab === 'Chat' && <ChatTab member={member} />}
           {activeTab === 'Pulse' && <PulseTab member={member} />}
-          {activeTab === 'Schedule' && <ScheduleTab />}
+          {activeTab === 'Schedule' && <ScheduleTab member={member} />}
         </View>
 
         {/* Edit modal */}

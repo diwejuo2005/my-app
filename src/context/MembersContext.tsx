@@ -1,11 +1,21 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import {
+  CalendarVisibility,
+  Connection,
+  ImportantDate,
+  ProfileSnapshot,
+  SharedCalendarEvent,
+  watchConnectionsWithProfiles,
+} from "../lib/firestore";
+import { useAuth } from "./AuthContext";
 
+// A person the signed-in user is connected to, derived from the other
+// participant's profile snapshot embedded on the shared connection doc.
 export type Member = {
-  id: number;
-  uid?: string;
+  id: number; // stable numeric hash of uid — used for avatar colors, list keys, etc.
+  uid: string;
   name: string;
-  relationship: string;
+  relationship: string; // the label the signed-in user gave this person
   photoUri?: string;
   city: string;
   country: string;
@@ -14,127 +24,74 @@ export type Member = {
   lon: number;
   wakeHour: number;
   sleepHour: number;
-  birthday?: string;        // "YYYY-MM-DD"
-  anniversary?: string;     // "YYYY-MM-DD"
-  hometown?: string;        // free text
-  occupation?: string;      // free text
-  importantDates?: Array<{ label: string; date: string }>; // up to 5
+  birthday?: string;    // "YYYY-MM-DD"
+  anniversary?: string; // "YYYY-MM-DD"
+  hometown?: string;
+  occupation?: string;
+  importantDates?: ImportantDate[];
+  pulseScores?: Record<string, number>;
+  weeklyNote?: string;
+  calendarVisibility?: CalendarVisibility;
+  calendarEvents?: SharedCalendarEvent[];
 };
 
-const DEFAULTS: Member[] = [
-  {
-    id: 1,
-    name: "Mom",
-    relationship: "Mother",
-    city: "New York",
-    country: "US",
-    timezone: "America/New_York",
-    lat: 40.7128,
-    lon: -74.006,
-    wakeHour: 7,
-    sleepHour: 22,
-  },
-  {
-    id: 2,
-    name: "Dad",
-    relationship: "Father",
-    city: "Chicago",
-    country: "US",
-    timezone: "America/Chicago",
-    lat: 41.8781,
-    lon: -87.6298,
-    wakeHour: 6,
-    sleepHour: 21,
-  },
-  {
-    id: 3,
-    name: "Nani",
-    relationship: "Grandmother",
-    city: "Mumbai",
-    country: "IN",
-    timezone: "Asia/Kolkata",
-    lat: 19.076,
-    lon: 72.8777,
-    wakeHour: 5,
-    sleepHour: 21,
-  },
-  {
-    id: 4,
-    name: "Alex",
-    relationship: "Sibling",
-    city: "London",
-    country: "GB",
-    timezone: "Europe/London",
-    lat: 51.5074,
-    lon: -0.1278,
-    wakeHour: 8,
-    sleepHour: 23,
-  },
-];
-
-type Ctx = {
-  members: Member[];
-  addMember: (m: Member) => void;
-  updateMember: (m: Member) => void;
-  removeMember: (id: number) => void;
-};
-const MembersContext = createContext<Ctx | null>(null);
-
-export function MembersProvider({ children }: { children: React.ReactNode }) {
-  const [members, setMembers] = useState<Member[]>(DEFAULTS);
-
-  useEffect(() => {
-    AsyncStorage.getItem("ensemble_members").then(async (d) => {
-      if (!d) return;
-      const parsed: Member[] = JSON.parse(d);
-      let filled = parsed.map((stored) => {
-        const def = DEFAULTS.find((x) => x.id === stored.id);
-        return { ...def, ...stored, timezone: stored.timezone || def?.timezone || "UTC" };
-      });
-
-      // Auto-correct members whose timezone is "GMT" — this was incorrectly stored
-      // by a bug in the city search fallback that used the weather API without timezone=auto.
-      const needsFix = filled.some((m) => m.timezone === "GMT");
-      if (needsFix) {
-        filled = await Promise.all(
-          filled.map(async (m) => {
-            if (m.timezone !== "GMT") return m;
-            try {
-              const res = await fetch(
-                `https://api.open-meteo.com/v1/forecast?latitude=${m.lat}&longitude=${m.lon}&current=temperature_2m&timezone=auto`,
-              );
-              const data = await res.json();
-              if (data?.timezone && data.timezone !== "GMT") {
-                return { ...m, timezone: data.timezone };
-              }
-            } catch {}
-            return m;
-          }),
-        );
-        AsyncStorage.setItem("ensemble_members", JSON.stringify(filled));
-      }
-
-      setMembers(filled);
-    });
-  }, []);
-
-  const save = (list: Member[]) => {
-    setMembers(list);
-    AsyncStorage.setItem("ensemble_members", JSON.stringify(list));
-  };
-
-  return (
-    <MembersContext.Provider
-      value={{
-        members,
-        addMember: (m) => save([...members, m]),
-        updateMember: (m) => save(members.map((x) => (x.id === m.id ? m : x))),
-        removeMember: (id) => save(members.filter((x) => x.id !== id)),
-      }}
-    >
-      {children}
-    </MembersContext.Provider>
-  );
+function uidToNum(uid: string): number {
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = Math.imul(31, h) + uid.charCodeAt(i) | 0;
+  return Math.abs(h);
 }
 
-export const useMembers = () => useContext(MembersContext)!;
+function profileToMember(profile: ProfileSnapshot, connection: Connection, myUid: string): Member {
+  return {
+    id: uidToNum(profile.uid),
+    uid: profile.uid,
+    name: profile.name,
+    relationship: connection.labels?.[myUid] ?? "Connection",
+    photoUri: profile.photoUrl ?? undefined,
+    city: profile.city,
+    country: profile.country,
+    timezone: profile.timezone || "UTC",
+    lat: profile.lat ?? 0,
+    lon: profile.lon ?? 0,
+    wakeHour: profile.wakeHour ?? 7,
+    sleepHour: profile.sleepHour ?? 22,
+    birthday: profile.birthday || undefined,
+    anniversary: profile.anniversary || undefined,
+    hometown: profile.hometown || undefined,
+    occupation: profile.occupation || undefined,
+    importantDates: profile.importantDates ?? [],
+    pulseScores: profile.pulseScores ?? {},
+    weeklyNote: profile.weeklyNote ?? "",
+    calendarVisibility: profile.calendarVisibility ?? "full",
+    calendarEvents: profile.calendarEvents ?? [],
+  };
+}
+
+type Ctx = { members: Member[]; loading: boolean };
+const MembersContext = createContext<Ctx>({ members: [], loading: true });
+
+export function MembersProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const uid = user?.uid ?? null;
+  // Tagged with the uid it was loaded for, so a sign-out or account switch
+  // never shows the previous user's members while the new snapshot loads.
+  const [loaded, setLoaded] = useState<{ uid: string; members: Member[] } | null>(null);
+
+  useEffect(() => {
+    if (!uid) return;
+    return watchConnectionsWithProfiles(uid, (items) => {
+      // Include pending_label too so both people see each other right after an invite is accepted
+      const connected = items.filter(
+        (i) => i.connection.status === "accepted" || i.connection.status === "pending_label"
+      );
+      setLoaded({ uid, members: connected.map(({ connection, profile }) => profileToMember(profile, connection, uid)) });
+    });
+  }, [uid]);
+
+  const current = uid && loaded?.uid === uid ? loaded.members : null;
+  const value = { members: current ?? [], loading: uid !== null && current === null };
+
+  return <MembersContext.Provider value={value}>{children}</MembersContext.Provider>;
+}
+
+export const useMembers = () => useContext(MembersContext);

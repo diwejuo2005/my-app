@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -91,23 +90,16 @@ export default function SettingsScreen() {
     }
   }, [loaded]);
 
-  function handleSignOut() {
-    Alert.alert(
-      "Sign out",
-      "Are you sure you want to sign out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Sign out",
-          style: "destructive",
-          onPress: async () => {
-            const { auth } = await import("../config/firebase");
-            const { signOut } = await import("firebase/auth");
-            await signOut(auth);
-          },
-        },
-      ],
-    );
+  // Alert.alert() (including its button-callback form used for confirmation
+  // dialogs) is a silent no-op on react-native-web, so "Sign out" would just
+  // do nothing when clicked there — use a real in-app modal instead.
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+
+  async function confirmSignOut() {
+    setShowSignOutConfirm(false);
+    const { auth } = await import("../config/firebase");
+    const { signOut } = await import("firebase/auth");
+    await signOut(auth);
   }
 
   const accent = settings.accentColor;
@@ -185,7 +177,7 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={handleSignOut}>
+          <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={() => setShowSignOutConfirm(true)}>
             <Ionicons name="log-out-outline" size={20} color="#f87171" />
             <Text style={[styles.rowLabel, { color: "#f87171" }]}>Sign out</Text>
           </TouchableOpacity>
@@ -328,6 +320,24 @@ export default function SettingsScreen() {
           >
             <Text style={styles.modalDoneText}>Done</Text>
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* Sign out confirmation */}
+      <Modal visible={showSignOutConfirm} transparent animationType="fade" onRequestClose={() => setShowSignOutConfirm(false)}>
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>Sign out</Text>
+            <Text style={styles.confirmMessage}>Are you sure you want to sign out?</Text>
+            <View style={styles.confirmActions}>
+              <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => setShowSignOutConfirm(false)}>
+                <Text style={styles.confirmCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmSignOutBtn} onPress={confirmSignOut}>
+                <Text style={styles.confirmSignOutTxt}>Sign out</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
@@ -484,4 +494,25 @@ const styles = StyleSheet.create({
     color: "#f0f0f6",
     fontWeight: "500",
   },
+  confirmBackdrop: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center", justifyContent: "center", padding: 24,
+  },
+  confirmCard: {
+    width: "100%", maxWidth: 360, backgroundColor: "#13131c", borderRadius: 20,
+    padding: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+  },
+  confirmTitle: { color: "#f0f0f6", fontSize: 17, fontWeight: "700", marginBottom: 6 },
+  confirmMessage: { color: "rgba(255,255,255,0.5)", fontSize: 14, marginBottom: 20 },
+  confirmActions: { flexDirection: "row", gap: 12 },
+  confirmCancelBtn: {
+    flex: 1, alignItems: "center", paddingVertical: 12,
+    borderRadius: 12, backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  confirmCancelTxt: { color: "rgba(255,255,255,0.7)", fontSize: 14, fontWeight: "600" },
+  confirmSignOutBtn: {
+    flex: 1, alignItems: "center", paddingVertical: 12,
+    borderRadius: 12, backgroundColor: "#f87171",
+  },
+  confirmSignOutTxt: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });
