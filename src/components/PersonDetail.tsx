@@ -26,6 +26,7 @@ import { useAuth } from '../context/AuthContext';
 import { confirmAction } from '../lib/confirm';
 import { Member } from '../context/MembersContext';
 import { ChatMessage, chatIdFor, deleteMessage, editMessage, labelConnection, sendMessage, setConnectionNickname, watchMessages } from '../lib/firestore';
+import { getSafetyFeed, SafetyItem, Severity } from '../lib/safety';
 import { uploadChatMedia } from '../lib/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,14 +36,6 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onDelete: (id: number) => void;
-};
-
-type NewsArticle = {
-  title: string;
-  link: string;
-  pubDate: string;
-  desc: string;
-  level: 'critical' | 'important' | 'normal';
 };
 
 type CalEvent = {
@@ -79,33 +72,6 @@ const RELATIONSHIPS = [
   'Cousin',
   'Other',
 ];
-
-const COUNTRY_TAG: Record<string, string> = {
-  US: 'world/united-states',
-  GB: 'world/uk',
-  IN: 'world/india',
-  AU: 'world/australia',
-  CA: 'world/canada',
-  FR: 'world/france',
-  DE: 'world/germany',
-  JP: 'world/japan',
-  CN: 'world/china',
-  BR: 'world/brazil',
-  NG: 'world/nigeria',
-  ZA: 'world/south-africa',
-  KE: 'world/kenya',
-  EG: 'world/egypt',
-  GH: 'world/ghana',
-  PK: 'world/pakistan',
-  BD: 'world/bangladesh',
-  MX: 'world/mexico',
-  IT: 'world/italy',
-  ES: 'world/spain',
-  NL: 'world/netherlands',
-  RU: 'world/russia',
-  UA: 'world/ukraine',
-  TR: 'world/turkey',
-};
 
 const MOOD_LABELS: Record<number, string> = {
   1: 'Struggling',
@@ -157,65 +123,6 @@ function timeAgo(dateStr: string): string {
   return `${Math.round(diff / 86400)}d ago`;
 }
 
-const CRIT_KW = ["earthquake","flood","hurricane","tornado","explosion","attack","shooting","terrorism","disaster","emergency","evacuation","outbreak","pandemic","riot","coup","curfew","wildfire","tsunami","volcano"];
-const IMP_KW = ["election","protest","strike","war","conflict","recession","scandal","arrested","indicted","sanctions","crisis"];
-
-function classifyArticle(title: string, desc: string): 'critical' | 'important' | 'normal' {
-  const t = (title + ' ' + desc).toLowerCase();
-  if (CRIT_KW.some((k) => t.includes(k))) return 'critical';
-  if (IMP_KW.some((k) => t.includes(k))) return 'important';
-  return 'normal';
-}
-
-const REGION_TAGS: Record<string, string> = {
-  NG:'world/africa',GH:'world/africa',KE:'world/africa',ZA:'world/africa',EG:'world/africa',ET:'world/africa',
-  IN:'world/asia-pacific',JP:'world/asia-pacific',CN:'world/asia-pacific',AU:'world/asia-pacific',KR:'world/asia-pacific',
-  GB:'world/europe',FR:'world/europe',DE:'world/europe',IT:'world/europe',ES:'world/europe',PL:'world/europe',
-  US:'world/americas',CA:'world/americas',MX:'world/americas',BR:'world/americas',AR:'world/americas',
-  SA:'world/middle-east',IL:'world/middle-east',TR:'world/middle-east',IQ:'world/middle-east',IR:'world/middle-east',
-};
-
-async function guardianFetch(url: string): Promise<NewsArticle[]> {
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    return (data.response?.results || []).map((item: any) => {
-      const desc = (item.fields?.trailText || '').replace(/<[^>]+>/g, '');
-      return { title: item.webTitle, link: item.webUrl, pubDate: item.webPublicationDate, desc, level: classifyArticle(item.webTitle, desc) };
-    });
-  } catch { return []; }
-}
-
-async function fetchMemberNews(member: Member): Promise<NewsArticle[]> {
-  const RANK: Record<string, number> = { critical: 0, important: 1, normal: 2 };
-  const sort = (arr: NewsArticle[]) =>
-    arr.sort((a, b) => {
-      const r = (RANK[a.level] ?? 2) - (RANK[b.level] ?? 2);
-      return r !== 0 ? r : new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime();
-    });
-
-  const seen = new Set<string>();
-  const merge = (existing: NewsArticle[], incoming: NewsArticle[]) => {
-    for (const a of incoming) { if (!seen.has(a.link)) { seen.add(a.link); existing.push(a); } }
-    return existing;
-  };
-
-  const cityQ = member.city ? encodeURIComponent('"' + member.city + '"') : null;
-  let articles: NewsArticle[] = [];
-
-  // 1. City exact search — only articles that explicitly mention the city
-  if (cityQ) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?q=${cityQ}&api-key=test&show-fields=trailText&page-size=15&order-by=newest`));
-
-  // 2. Country tag + city keyword (still city-specific, within the country section)
-  const tag = COUNTRY_TAG[member.country];
-  if (articles.length < 5 && tag && cityQ) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&q=${cityQ}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
-
-  // 3. Country tag alone — same country, no city filter (closest fallback)
-  if (articles.length < 5 && tag) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
-
-  return sort(articles).slice(0, 20);
-}
-
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
 function Avatar({ member, size = 56 }: { member: Member; size?: number }) {
@@ -242,32 +149,31 @@ function Avatar({ member, size = 56 }: { member: Member; size?: number }) {
 
 // ─── NEWS TAB ─────────────────────────────────────────────────────────────────
 
-function newsBorderColor(level: string) {
-  if (level === 'critical') return '#ef4444';
-  if (level === 'important') return '#f59e0b';
-  return 'rgba(34,197,94,0.45)';
+function newsBorderColor(severity: Severity) {
+  return severity === 'urgent' ? '#ef4444' : '#f59e0b';
 }
-function newsTitleColor(level: string) {
-  if (level === 'critical') return '#fca5a5';
-  if (level === 'important') return '#fde68a';
-  return 'rgba(255,255,255,0.9)';
+function newsTitleColor(severity: Severity) {
+  return severity === 'urgent' ? '#fca5a5' : '#fde68a';
 }
 
 function NewsTab({ member }: { member: Member }) {
-  const [articles, setArticles] = useState<NewsArticle[]>([]);
+  const [items, setItems] = useState<SafetyItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
-    setArticles([]);
+    setItems([]);
     const load = () =>
-      fetchMemberNews(member)
-        .then((items) => { setArticles(items); setLoading(false); })
-        .catch(() => setLoading(false));
+      getSafetyFeed(member)
+        .then((feed) => { if (!cancelled) setItems(feed); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLoading(false); });
     load();
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
-  }, [member.id]);
+    // Sources update every few minutes at most; refreshing faster just burns battery.
+    const interval = setInterval(load, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [member.id, member.city, member.lat, member.lon]);
 
   if (loading) {
     return (
@@ -282,33 +188,31 @@ function NewsTab({ member }: { member: Member }) {
       contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 100 }}
       showsVerticalScrollIndicator={false}
     >
-      {articles.length === 0 && (
-        <Text style={{ color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginTop: 40, fontSize: 14 }}>
-          No recent headlines found
+      <Text style={d.newsAgo}>
+        Safety alerts and local news near {member.city || 'them'} from the last 3 days.
+      </Text>
+      {items.length === 0 && (
+        <Text style={{ color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 40, fontSize: 14 }}>
+          Nothing concerning near {member.city || 'them'} right now ✓
         </Text>
       )}
-      {articles.map((article, i) => (
+      {items.map((item) => (
         <TouchableOpacity
-          key={i}
-          style={[d.newsCard, { borderColor: newsBorderColor(article.level), borderWidth: article.level !== 'normal' ? 2 : 1 }]}
+          key={item.id}
+          style={[d.newsCard, { borderColor: newsBorderColor(item.severity), borderWidth: 2 }]}
           activeOpacity={0.75}
-          onPress={() => Linking.openURL(article.link)}
+          onPress={() => Linking.openURL(item.url)}
         >
-          {article.level !== 'normal' && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: newsBorderColor(article.level) }} />
-              <Text style={{ fontSize: 9, fontWeight: '800', letterSpacing: 1, color: newsBorderColor(article.level), textTransform: 'uppercase' }}>
-                {article.level === 'critical' ? 'CRITICAL' : 'IMPORTANT'}
-              </Text>
-            </View>
-          )}
-          <Text style={[d.newsTitle, { color: newsTitleColor(article.level) }]}>{article.title}</Text>
-          {!!article.desc && (
-            <Text style={d.newsDesc} numberOfLines={2}>
-              {article.desc}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 2 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: newsBorderColor(item.severity) }} />
+            <Text style={{ fontSize: 9, fontWeight: '800', letterSpacing: 1, color: newsBorderColor(item.severity), textTransform: 'uppercase' }}>
+              {item.severity === 'urgent' ? 'URGENT' : 'HEADS UP'} · {item.category}{item.kind === 'alert' ? ' · OFFICIAL ALERT' : ''}
             </Text>
-          )}
-          <Text style={d.newsAgo}>{timeAgo(article.pubDate)}</Text>
+          </View>
+          <Text style={[d.newsTitle, { color: newsTitleColor(item.severity) }]}>{item.title}</Text>
+          <Text style={d.newsAgo}>
+            {item.source}{item.extraSources > 0 ? ` +${item.extraSources} more` : ''} · {timeAgo(item.publishedAt)}
+          </Text>
         </TouchableOpacity>
       ))}
     </ScrollView>
@@ -1015,11 +919,6 @@ const d = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.9)',
     lineHeight: 20,
-  },
-  newsDesc: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    lineHeight: 17,
   },
   newsAgo: {
     fontSize: 11,
