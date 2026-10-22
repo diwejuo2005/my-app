@@ -58,6 +58,7 @@ export default function OnboardingLocation() {
     try {
       let lat = 0;
       let lon = 0;
+      let region = "";
       let timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       try {
         const geoRes = await fetch(
@@ -71,6 +72,7 @@ export default function OnboardingLocation() {
         if (match) {
           lat = match.latitude ?? 0;
           lon = match.longitude ?? 0;
+          region = match.admin1 ?? "";
           if (match.timezone) timezone = match.timezone;
         }
       } catch {
@@ -80,6 +82,7 @@ export default function OnboardingLocation() {
       await updateUserProfile(user.uid, {
         name: name.trim(),
         city: city.trim(),
+        region,
         country: selectedCountry.name,
         countryCode: selectedCountry.code,
         timezone,

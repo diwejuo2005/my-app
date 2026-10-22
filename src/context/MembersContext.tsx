@@ -20,7 +20,9 @@ export type Member = {
   relationship: string; // the label the signed-in user gave this person
   photoUri?: string;
   city: string;
-  country: string;
+  region?: string; // state / province, e.g. "North Carolina"
+  country: string; // full name, e.g. "United States"
+  countryCode?: string; // ISO code, e.g. "US"
   timezone: string;
   lat: number;
   lon: number;
@@ -53,7 +55,9 @@ function profileToMember(profile: ProfileSnapshot, connection: Connection, myUid
     relationship: connection.labels?.[myUid] ?? "Connection",
     photoUri: profile.photoUrl ?? undefined,
     city: profile.city,
+    region: profile.region || undefined,
     country: profile.country,
+    countryCode: profile.countryCode || undefined,
     timezone: profile.timezone || "UTC",
     lat: profile.lat ?? 0,
     lon: profile.lon ?? 0,

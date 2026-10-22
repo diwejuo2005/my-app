@@ -45,6 +45,7 @@ export type UserProfile = {
   phone: string;
   pronouns: string;
   city: string;
+  region: string; // state / province, e.g. "North Carolina"
   country: string;
   countryCode: string;
   timezone: string;
@@ -76,7 +77,9 @@ export type ProfileSnapshot = {
   photoUrl: string | null;
   bio: string;
   city: string;
+  region: string;
   country: string;
+  countryCode: string;
   timezone: string;
   lat: number;
   lon: number;
@@ -94,7 +97,7 @@ export type ProfileSnapshot = {
 };
 
 const SNAPSHOT_FIELDS: Array<keyof ProfileSnapshot> = [
-  "name", "photoUrl", "bio", "city", "country", "timezone", "lat", "lon", "wakeHour", "sleepHour",
+  "name", "photoUrl", "bio", "city", "region", "country", "countryCode", "timezone", "lat", "lon", "wakeHour", "sleepHour",
   "birthday", "anniversary", "hometown", "occupation", "importantDates", "pulseScores", "weeklyNote",
   "calendarVisibility", "calendarEvents",
 ];
@@ -106,7 +109,9 @@ export function toProfileSnapshot(profile: UserProfile): ProfileSnapshot {
     photoUrl: profile.photoUrl,
     bio: profile.bio ?? "",
     city: profile.city,
+    region: profile.region ?? "",
     country: profile.country,
+    countryCode: profile.countryCode ?? "",
     timezone: profile.timezone,
     lat: profile.lat,
     lon: profile.lon,
@@ -164,6 +169,7 @@ export async function createUserProfile(uid: string, email: string) {
       phone: "",
       pronouns: "",
       city: "",
+      region: "",
       country: "",
       countryCode: "",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,

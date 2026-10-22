@@ -139,6 +139,7 @@ export default function ProfileScreen() {
       setBio(p.bio || "");
       setPlace(p.city ? {
         city: p.city,
+        region: p.region || undefined,
         country: p.country || "",
         countryCode: p.countryCode || "",
         timezone: p.timezone,
@@ -202,6 +203,7 @@ export default function ProfileScreen() {
         // connection's map pin, local time and weather follow the new city.
         ...(place && {
           city: place.city,
+          region: place.region ?? "",
           country: place.country,
           countryCode: place.countryCode,
           timezone: place.timezone,
