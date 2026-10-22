@@ -277,19 +277,20 @@ export default function GlobeScreen() {
     ? members.filter((m) => selectedCity.memberIds.includes(m.id))
     : [];
 
-  const html = useMemo(() => {
-    const data = JSON.stringify(
-      members.map((m) => ({
-        id: m.id,
-        name: m.name,
-        city: m.city,
-        lat: m.lat,
-        lon: m.lon,
-        relationship: m.relationship,
-      }))
-    );
-    return GLOBE_HTML_TEMPLATE.replace("__MEMBERS_DATA__", data);
-  }, [members]);
+  // Keyed on the pin data itself (not the members array) so the globe only
+  // reloads when someone's pin actually moves or is relabeled — not on every
+  // snapshot, e.g. a pulse score update, which would reset the user's spin.
+  const pinsJson = JSON.stringify(
+    members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      city: m.city,
+      lat: m.lat,
+      lon: m.lon,
+      relationship: m.relationship,
+    }))
+  );
+  const html = useMemo(() => GLOBE_HTML_TEMPLATE.replace("__MEMBERS_DATA__", pinsJson), [pinsJson]);
 
   function handleMessage(event: { nativeEvent: { data: string } }) {
     try {

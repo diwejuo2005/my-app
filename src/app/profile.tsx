@@ -5,8 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Member, useMembers } from "../context/MembersContext";
 import { updateUserProfile, watchUserProfile } from "../lib/firestore";
+import { describePlace, Place, searchPlaces } from "../lib/geocode";
 import { uploadProfilePhoto } from "../lib/storage";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -112,7 +114,10 @@ export default function ProfileScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [pickedLocalUri, setPickedLocalUri] = useState<string | null>(null);
   const [bio, setBio] = useState("");
-  const [city, setCity] = useState("");
+  const [place, setPlace] = useState<Place | null>(null);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<Place[]>([]);
+  const [searchingPlace, setSearchingPlace] = useState(false);
   const [birthday, setBirthday] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -132,7 +137,14 @@ export default function ProfileScreen() {
       setName(p.name || "");
       setPhotoUrl(p.photoUrl);
       setBio(p.bio || "");
-      setCity(p.city || "");
+      setPlace(p.city ? {
+        city: p.city,
+        country: p.country || "",
+        countryCode: p.countryCode || "",
+        timezone: p.timezone,
+        lat: p.lat,
+        lon: p.lon,
+      } : null);
       setBirthday(p.birthday || "");
       setPhone(p.phone || "");
       setEmail(p.email || "");
@@ -155,6 +167,24 @@ export default function ProfileScreen() {
     }
   }
 
+  async function searchPlace() {
+    if (!placeQuery.trim()) return;
+    setSearchingPlace(true);
+    try {
+      setPlaceResults(await searchPlaces(placeQuery.trim()));
+    } catch {
+      setPlaceResults([]);
+    } finally {
+      setSearchingPlace(false);
+    }
+  }
+
+  function choosePlace(p: Place) {
+    setPlace(p);
+    setPlaceQuery("");
+    setPlaceResults([]);
+  }
+
   async function save() {
     if (!user) return;
     if (!name.trim()) {
@@ -168,7 +198,16 @@ export default function ProfileScreen() {
         name: name.trim(),
         photoUrl: uploadedUrl,
         bio: bio.trim(),
-        city: city.trim(),
+        // City, country, coordinates and timezone always move together, so a
+        // connection's map pin, local time and weather follow the new city.
+        ...(place && {
+          city: place.city,
+          country: place.country,
+          countryCode: place.countryCode,
+          timezone: place.timezone,
+          lat: place.lat,
+          lon: place.lon,
+        }),
         birthday,
         phone: phone.trim(),
         email: email.trim(),
@@ -312,13 +351,37 @@ export default function ProfileScreen() {
             <Text style={s.sectionTitle}>Location & Work</Text>
 
             <Text style={s.label}>CURRENT CITY</Text>
-            <TextInput
-              style={s.input}
-              value={city}
-              onChangeText={setCity}
-              placeholder="Where are you based?"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-            />
+            {place && (
+              <View style={s.currentPlace}>
+                <Ionicons name="location" size={16} color="#a78bfa" />
+                <Text style={s.currentPlaceText}>{describePlace(place)}</Text>
+              </View>
+            )}
+            <View style={s.placeSearchRow}>
+              <TextInput
+                style={[s.input, { flex: 1 }]}
+                value={placeQuery}
+                onChangeText={setPlaceQuery}
+                onSubmitEditing={searchPlace}
+                returnKeyType="search"
+                placeholder={place ? "Moved? Search a new city" : "Search for your city"}
+                placeholderTextColor="rgba(255,255,255,0.3)"
+              />
+              <TouchableOpacity style={s.placeSearchBtn} onPress={searchPlace} disabled={searchingPlace}>
+                {searchingPlace
+                  ? <ActivityIndicator color="#a78bfa" size="small" />
+                  : <Ionicons name="search" size={18} color="#a78bfa" />}
+              </TouchableOpacity>
+            </View>
+            {placeResults.map((p) => (
+              <TouchableOpacity
+                key={`${p.lat},${p.lon}`}
+                style={s.placeResult}
+                onPress={() => choosePlace(p)}
+              >
+                <Text style={s.placeResultText}>{describePlace(p)}</Text>
+              </TouchableOpacity>
+            ))}
 
             <Text style={s.label}>HOMETOWN</Text>
             <TextInput
@@ -463,6 +526,30 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
+  currentPlace: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  currentPlaceText: { color: "#f0f0f6", fontSize: 15, flexShrink: 1 },
+  placeSearchRow: { flexDirection: "row", gap: 8 },
+  placeSearchBtn: {
+    width: 46,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(167,139,250,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(167,139,250,0.3)",
+  },
+  placeResult: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  placeResultText: { color: "rgba(255,255,255,0.85)", fontSize: 14 },
   dateBtn: {
     backgroundColor: "rgba(255,255,255,0.07)",
     borderRadius: 10,

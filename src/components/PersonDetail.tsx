@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { AudioModule, createAudioPlayer, RecordingPresets, setAudioModeAsync, useAudioRecorder } from 'expo-audio';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as ImagePicker from 'expo-image-picker';
@@ -26,7 +25,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { confirmAction } from '../lib/confirm';
 import { Member } from '../context/MembersContext';
-import { ChatMessage, chatIdFor, deleteMessage, editMessage, sendMessage, watchMessages } from '../lib/firestore';
+import { ChatMessage, chatIdFor, deleteMessage, editMessage, labelConnection, sendMessage, watchMessages } from '../lib/firestore';
 import { uploadChatMedia } from '../lib/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,7 +34,6 @@ type Props = {
   member: Member;
   visible: boolean;
   onClose: () => void;
-  onUpdate: (updated: Member) => void;
   onDelete: (id: number) => void;
 };
 
@@ -45,15 +43,6 @@ type NewsArticle = {
   pubDate: string;
   desc: string;
   level: 'critical' | 'important' | 'normal';
-};
-
-type CityResult = {
-  city: string;
-  country: string;
-  timezone: string;
-  lat: number;
-  lon: number;
-  admin1?: string;
 };
 
 type CalEvent = {
@@ -225,20 +214,6 @@ async function fetchMemberNews(member: Member): Promise<NewsArticle[]> {
   if (articles.length < 5 && tag) merge(articles, await guardianFetch(`https://content.guardianapis.com/search?tag=${tag}&api-key=test&show-fields=trailText&page-size=10&order-by=newest`));
 
   return sort(articles).slice(0, 20);
-}
-
-async function searchCities(query: string): Promise<CityResult[]> {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=8&language=en&format=json`;
-  const res = await fetch(url);
-  const data = await res.json();
-  return (data.results || []).map((r: any) => ({
-    city: r.name,
-    country: r.country_code,
-    timezone: r.timezone,
-    lat: r.latitude,
-    lon: r.longitude,
-    admin1: r.admin1,
-  }));
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -681,259 +656,87 @@ function PulseTab({ member }: { member: Member }) {
 
 // ─── EDIT SUB-MODAL ───────────────────────────────────────────────────────────
 
+// Only the label is yours to change — everything else about a person (photo,
+// city, dates) comes from their own profile and updates here live when they
+// change it.
 function EditModal({
   member,
   visible,
   onClose,
-  onSave,
 }: {
   member: Member;
   visible: boolean;
   onClose: () => void;
-  onSave: (updated: Member) => void;
 }) {
-  const [name, setName] = useState(member.name);
-  const [relationship, setRelationship] = useState(member.relationship);
-  const [photoUri, setPhotoUri] = useState<string | undefined>(member.photoUri);
-  const [hometown, setHometown] = useState(member.hometown || '');
-  const [birthday, setBirthday] = useState(member.birthday || '');
-  const [anniversary, setAnniversary] = useState(member.anniversary || '');
-  const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
-  const [showAnniversaryPicker, setShowAnniversaryPicker] = useState(false);
-  const [cityQuery, setCityQuery] = useState(member.city || '');
-  const editScrollRef = useRef<ScrollView>(null);
-  const [cityResult, setCityResult] = useState<CityResult | null>({
-    city: member.city,
-    country: member.country,
-    timezone: member.timezone,
-    lat: member.lat,
-    lon: member.lon,
-  });
-  const [searchResults, setSearchResults] = useState<CityResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const { user } = useAuth();
+  const [label, setLabel] = useState(member.relationship);
+  const [saving, setSaving] = useState(false);
 
-  // Reset state when member changes
   useEffect(() => {
-    setName(member.name);
-    setRelationship(member.relationship);
-    setPhotoUri(member.photoUri);
-    setHometown(member.hometown || '');
-    setBirthday(member.birthday || '');
-    setAnniversary(member.anniversary || '');
-    setCityQuery(member.city || '');
-    setCityResult({
-      city: member.city,
-      country: member.country,
-      timezone: member.timezone,
-      lat: member.lat,
-      lon: member.lon,
-    });
-    setSearchResults([]);
+    if (visible) setLabel(member.relationship);
   }, [member.id, visible]);
 
-  async function pickPhoto() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      setPhotoUri(result.assets[0].uri);
-    }
-  }
-
-  async function searchCity() {
-    if (!cityQuery.trim()) return;
-    setSearching(true);
-    try {
-      const results = await searchCities(cityQuery);
-      setSearchResults(results);
-    } catch {
-      setSearchResults([]);
-    }
-    setSearching(false);
-  }
-
-  function handleSave() {
-    if (!name.trim()) {
-      Alert.alert('Name is required');
+  async function handleSave() {
+    const trimmed = label.trim();
+    if (!trimmed) {
+      Alert.alert('Add a label', 'What do you call them? e.g. Sister, Mom, Ada.');
       return;
     }
-    const city = cityResult || { city: member.city, country: member.country, timezone: member.timezone, lat: member.lat, lon: member.lon };
-    onSave({
-      ...member,
-      name: name.trim(),
-      relationship,
-      photoUri,
-      hometown,
-      birthday,
-      anniversary,
-      ...city,
-    });
+    if (!user) return;
+    setSaving(true);
+    try {
+      await labelConnection(member.connectionId, user.uid, trimmed);
+      onClose();
+    } catch {
+      Alert.alert('Error', 'Could not save. Try again.');
+    } finally {
+      setSaving(false);
+    }
   }
-
-  const initials = name.trim() ? name.trim()[0].toUpperCase() : '?';
-  const avatarBg = getAvatarColor(member.id);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#07080f' }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
-          ref={editScrollRef}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: 24, paddingBottom: 80 }}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={e.title}>Edit Profile</Text>
+          <Text style={e.title}>Edit {member.name}</Text>
 
-          {/* Photo */}
-          <Text style={e.label}>PHOTO</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={e.avatarCircle} />
-            ) : (
-              <View style={[e.avatarCircle, { backgroundColor: avatarBg }]}>
-                <Text style={{ color: 'white', fontWeight: '700', fontSize: 26 }}>{initials}</Text>
-              </View>
-            )}
-            <TouchableOpacity style={e.uploadBtn} onPress={pickPhoto}>
-              <Text style={e.uploadText}>Upload Photo</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Name */}
-          <Text style={e.label}>NAME</Text>
+          <Text style={e.label}>WHAT YOU CALL THEM</Text>
           <TextInput
             style={e.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="Name..."
+            value={label}
+            onChangeText={setLabel}
+            placeholder="e.g. Sister, Mom, Ada"
             placeholderTextColor="rgba(255,255,255,0.3)"
+            returnKeyType="done"
+            onSubmitEditing={handleSave}
           />
-
-          {/* Relationship */}
-          <Text style={e.label}>RELATIONSHIP</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
             {RELATIONSHIPS.map((r) => (
               <TouchableOpacity
                 key={r}
-                onPress={() => setRelationship(r)}
-                style={[e.relBtn, relationship === r && e.relBtnActive]}
+                onPress={() => setLabel(r)}
+                style={[e.relBtn, label === r && e.relBtnActive]}
               >
-                <Text style={[e.relText, relationship === r && e.relTextActive]}>{r}</Text>
+                <Text style={[e.relText, label === r && e.relTextActive]}>{r}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          {/* Hometown */}
-          <Text style={e.label}>HOMETOWN</Text>
-          <TextInput
-            style={e.input}
-            value={hometown}
-            onChangeText={setHometown}
-            placeholder="City / Town they grew up in"
-            placeholderTextColor="rgba(255,255,255,0.3)"
-          />
-
-          {/* Birthday */}
-          <Text style={e.label}>BIRTHDAY</Text>
-          <TouchableOpacity style={e.dateBtn} onPress={() => setShowBirthdayPicker(true)}>
-            <Text style={e.dateBtnText}>{birthday ? birthday : 'Tap to add birthday'}</Text>
-          </TouchableOpacity>
-          {showBirthdayPicker && (
-            <DateTimePicker
-              value={birthday ? new Date(birthday) : new Date(1980, 0, 1)}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              maximumDate={new Date()}
-              onChange={(_, d) => {
-                setShowBirthdayPicker(false);
-                if (d) setBirthday(d.toISOString().split('T')[0]);
-              }}
-            />
-          )}
-
-          {/* Anniversary */}
-          <Text style={e.label}>ANNIVERSARY</Text>
-          <TouchableOpacity style={e.dateBtn} onPress={() => setShowAnniversaryPicker(true)}>
-            <Text style={e.dateBtnText}>{anniversary ? anniversary : 'Tap to add anniversary'}</Text>
-          </TouchableOpacity>
-          {showAnniversaryPicker && (
-            <DateTimePicker
-              value={anniversary ? new Date(anniversary) : new Date(1980, 0, 1)}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              maximumDate={new Date()}
-              onChange={(_, d) => {
-                setShowAnniversaryPicker(false);
-                if (d) setAnniversary(d.toISOString().split('T')[0]);
-              }}
-            />
-          )}
-
-          {/* City */}
-          <Text style={e.label}>CITY</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-            <TextInput
-              style={[e.input, { flex: 1, marginBottom: 0 }]}
-              value={cityQuery}
-              onChangeText={setCityQuery}
-              onSubmitEditing={searchCity}
-              placeholder="Search city..."
-              placeholderTextColor="rgba(255,255,255,0.3)"
-              onFocus={() => {
-                setTimeout(() => editScrollRef.current?.scrollToEnd({ animated: true }), 300);
-              }}
-            />
-            <TouchableOpacity style={e.searchBtn} onPress={searchCity}>
-              <Text style={{ color: 'white', fontWeight: '600' }}>
-                {searching ? '...' : 'Search'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {searchResults.length > 0 && (
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              scrollEnabled={searchResults.length > 4}
-              style={[e.resultsList, { maxHeight: 200 }]}
-            >
-              {searchResults.map((r, i) => (
-                <TouchableOpacity
-                  key={`${r.lat}-${r.lon}-${i}`}
-                  style={e.resultRow}
-                  activeOpacity={0.6}
-                  onPress={() => {
-                    setCityResult(r);
-                    setCityQuery(r.city);
-                    setSearchResults([]);
-                  }}
-                >
-                  <Text style={e.resultText}>
-                    {r.city}{r.admin1 ? `, ${r.admin1}` : ''} · {r.country}
-                  </Text>
-                  <Text style={e.resultTz}>{r.timezone}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
-          {cityResult && (
-            <Text style={e.citySelected}>
-              Selected: {cityResult.city}, {cityResult.country}
-            </Text>
-          )}
+          <Text style={e.citySelected}>
+            Only you see this label. {member.name}'s photo, city and dates come from their own profile and update here automatically when they change them.
+          </Text>
 
           {/* Actions */}
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
-            <TouchableOpacity
-              style={e.cancelBtn}
-              onPress={onClose}
-            >
+            <TouchableOpacity style={e.cancelBtn} onPress={onClose}>
               <Text style={{ color: 'rgba(255,255,255,0.6)', fontWeight: '600' }}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={e.saveBtn} onPress={handleSave}>
-              <Text style={{ color: 'white', fontWeight: '700' }}>Save</Text>
+            <TouchableOpacity style={[e.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+              <Text style={{ color: 'white', fontWeight: '700' }}>{saving ? 'Saving…' : 'Save'}</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -1056,7 +859,7 @@ function ScheduleTab({ member }: { member: Member }) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function PersonDetail({ member, visible, onClose, onUpdate, onDelete }: Props) {
+export default function PersonDetail({ member, visible, onClose, onDelete }: Props) {
   const [activeTab, setActiveTab] = useState<'News' | 'Chat' | 'Pulse' | 'Schedule'>('News');
   const [editVisible, setEditVisible] = useState(false);
 
@@ -1065,11 +868,6 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
       onClose();
       onDelete(member.id);
     });
-  }
-
-  function handleUpdate(updated: Member) {
-    setEditVisible(false);
-    onUpdate(updated);
   }
 
   const tabs: Array<'News' | 'Chat' | 'Pulse' | 'Schedule'> = ['News', 'Chat', 'Pulse', 'Schedule'];
@@ -1127,7 +925,6 @@ export default function PersonDetail({ member, visible, onClose, onUpdate, onDel
           member={member}
           visible={editVisible}
           onClose={() => setEditVisible(false)}
-          onSave={handleUpdate}
         />
       </View>
     </Modal>

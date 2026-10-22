@@ -14,6 +14,7 @@ import { useAuth } from "./AuthContext";
 export type Member = {
   id: number; // stable numeric hash of uid — used for avatar colors, list keys, etc.
   uid: string;
+  connectionId: string;
   name: string;
   relationship: string; // the label the signed-in user gave this person
   photoUri?: string;
@@ -45,6 +46,7 @@ function profileToMember(profile: ProfileSnapshot, connection: Connection, myUid
   return {
     id: uidToNum(profile.uid),
     uid: profile.uid,
+    connectionId: connection.id,
     name: profile.name,
     relationship: connection.labels?.[myUid] ?? "Connection",
     photoUri: profile.photoUrl ?? undefined,

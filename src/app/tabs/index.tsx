@@ -223,8 +223,11 @@ export default function HomeScreen() {
   const { members, loading: membersLoading } = useMembers();
   const router = useRouter();
   const [tick, setTick] = useState(0);
-  const [viewingMember, setViewingMember] = useState<Member | null>(null);
+  // Track the open person by id and read them from the live list, so their
+  // detail sheet reflects label/location/photo changes while it's open.
+  const [viewingId, setViewingId] = useState<number | null>(null);
   const [localMembers, setLocalMembers] = useState<Member[]>([]);
+  const viewingMember = localMembers.find((m) => m.id === viewingId) ?? null;
 
   useEffect(() => { setLocalMembers(members); }, [members]);
 
@@ -267,7 +270,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             localMembers.map((m) => (
-              <FamilyCard key={m.id} member={m} tick={tick} onView={() => setViewingMember(m)} />
+              <FamilyCard key={m.id} member={m} tick={tick} onView={() => setViewingId(m.id)} />
             ))
           )}
           <View style={{ height: 100 }} />
@@ -286,14 +289,10 @@ export default function HomeScreen() {
         <PersonDetail
           member={viewingMember}
           visible={!!viewingMember}
-          onClose={() => setViewingMember(null)}
-          onUpdate={(updated) => {
-            setLocalMembers((prev) => prev.map((m) => m.id === updated.id ? updated : m));
-            setViewingMember(updated);
-          }}
+          onClose={() => setViewingId(null)}
           onDelete={(id) => {
             setLocalMembers((prev) => prev.filter((m) => m.id !== id));
-            setViewingMember(null);
+            setViewingId(null);
           }}
         />
       )}
