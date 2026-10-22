@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -140,6 +141,7 @@ export type Connection = {
   initiatorUid: string;
   acceptorUid: string;
   labels: Record<string, string>; // uid → label they gave the other person
+  nicknames?: Record<string, string>; // uid → private display name they gave the other person
   profiles: Record<string, ProfileSnapshot>; // uid → their profile snapshot, kept fresh by updateUserProfile
   createdAt: any;
   acceptedAt?: any;
@@ -291,7 +293,21 @@ export async function labelConnection(
   await updateDoc(ref, {
     [`labels.${uid}`]: label,
     status: bothLabeled ? "accepted" : "pending_label",
-    ...(bothLabeled ? { acceptedAt: serverTimestamp() } : {}),
+    // Only stamp the first time it becomes accepted, not on every relabel.
+    ...(bothLabeled && data.status !== "accepted" ? { acceptedAt: serverTimestamp() } : {}),
+  });
+}
+
+// The name `uid` sees for the other person, like a saved contact name. Blank
+// clears it so they're shown by the name they set on their own profile.
+export async function setConnectionNickname(
+  connectionId: string,
+  uid: string,
+  nickname: string
+): Promise<void> {
+  const trimmed = nickname.trim();
+  await updateDoc(doc(db, "connections", connectionId), {
+    [`nicknames.${uid}`]: trimmed ? trimmed : deleteField(),
   });
 }
 

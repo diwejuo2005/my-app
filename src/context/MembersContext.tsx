@@ -15,7 +15,8 @@ export type Member = {
   id: number; // stable numeric hash of uid — used for avatar colors, list keys, etc.
   uid: string;
   connectionId: string;
-  name: string;
+  name: string; // your contact name for them if you set one, else the name on their profile
+  profileName: string; // the name they set on their own profile
   relationship: string; // the label the signed-in user gave this person
   photoUri?: string;
   city: string;
@@ -47,7 +48,8 @@ function profileToMember(profile: ProfileSnapshot, connection: Connection, myUid
     id: uidToNum(profile.uid),
     uid: profile.uid,
     connectionId: connection.id,
-    name: profile.name,
+    name: connection.nicknames?.[myUid] || profile.name,
+    profileName: profile.name,
     relationship: connection.labels?.[myUid] ?? "Connection",
     photoUri: profile.photoUrl ?? undefined,
     city: profile.city,

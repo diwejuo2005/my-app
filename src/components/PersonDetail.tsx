@@ -25,7 +25,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { confirmAction } from '../lib/confirm';
 import { Member } from '../context/MembersContext';
-import { ChatMessage, chatIdFor, deleteMessage, editMessage, labelConnection, sendMessage, watchMessages } from '../lib/firestore';
+import { ChatMessage, chatIdFor, deleteMessage, editMessage, labelConnection, sendMessage, setConnectionNickname, watchMessages } from '../lib/firestore';
 import { uploadChatMedia } from '../lib/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -656,9 +656,9 @@ function PulseTab({ member }: { member: Member }) {
 
 // ─── EDIT SUB-MODAL ───────────────────────────────────────────────────────────
 
-// Only the label is yours to change — everything else about a person (photo,
-// city, dates) comes from their own profile and updates here live when they
-// change it.
+// Only your contact name and label for them are yours to change — everything
+// else about a person (photo, city, dates) comes from their own profile and
+// updates here live when they change it.
 function EditModal({
   member,
   visible,
@@ -669,23 +669,31 @@ function EditModal({
   onClose: () => void;
 }) {
   const { user } = useAuth();
+  // Blank means "no contact name": they're shown by their own profile name.
+  const initialNickname = member.name !== member.profileName ? member.name : '';
+  const [nickname, setNickname] = useState(initialNickname);
   const [label, setLabel] = useState(member.relationship);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (visible) setLabel(member.relationship);
+    if (!visible) return;
+    setNickname(initialNickname);
+    setLabel(member.relationship);
   }, [member.id, visible]);
 
   async function handleSave() {
     const trimmed = label.trim();
     if (!trimmed) {
-      Alert.alert('Add a label', 'What do you call them? e.g. Sister, Mom, Ada.');
+      Alert.alert('Add a relationship', 'How are they related to you? e.g. Sister, Mom, Best friend.');
       return;
     }
     if (!user) return;
     setSaving(true);
     try {
-      await labelConnection(member.connectionId, user.uid, trimmed);
+      await Promise.all([
+        labelConnection(member.connectionId, user.uid, trimmed),
+        setConnectionNickname(member.connectionId, user.uid, nickname),
+      ]);
       onClose();
     } catch {
       Alert.alert('Error', 'Could not save. Try again.');
@@ -704,12 +712,22 @@ function EditModal({
         >
           <Text style={e.title}>Edit {member.name}</Text>
 
-          <Text style={e.label}>WHAT YOU CALL THEM</Text>
+          <Text style={e.label}>NAME</Text>
+          <TextInput
+            style={e.input}
+            value={nickname}
+            onChangeText={setNickname}
+            placeholder={member.profileName || 'Name'}
+            placeholderTextColor="rgba(255,255,255,0.3)"
+            returnKeyType="next"
+          />
+
+          <Text style={e.label}>RELATIONSHIP</Text>
           <TextInput
             style={e.input}
             value={label}
             onChangeText={setLabel}
-            placeholder="e.g. Sister, Mom, Ada"
+            placeholder="e.g. Sister, Mom, Best friend"
             placeholderTextColor="rgba(255,255,255,0.3)"
             returnKeyType="done"
             onSubmitEditing={handleSave}
@@ -727,7 +745,7 @@ function EditModal({
           </ScrollView>
 
           <Text style={e.citySelected}>
-            Only you see this label. {member.name}'s photo, city and dates come from their own profile and update here automatically when they change them.
+            Only you see this name and relationship.{member.profileName ? ` Leave the name blank to use the one they set ("${member.profileName}").` : ''} Their photo, city and dates come from their own profile and update here automatically when they change them.
           </Text>
 
           {/* Actions */}
