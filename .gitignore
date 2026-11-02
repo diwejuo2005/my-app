@@ -41,3 +41,6 @@ yarn-error.*
 /ios
 /android
 .claude/worktrees/
+
+# server secrets (copy from server/.env.example)
+.env
