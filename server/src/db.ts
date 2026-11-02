@@ -6,8 +6,9 @@ import { config } from "./config.js";
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
   max: 10,
-  // Managed Postgres (Fly, Neon) requires TLS; the local Docker one doesn't.
-  ssl: config.isProduction ? { rejectUnauthorized: false } : undefined,
+  // Neon requires TLS; the local Docker one doesn't. Verify the server's
+  // certificate so nothing on the network can pose as the database.
+  ssl: config.isProduction ? { rejectUnauthorized: true } : undefined,
 });
 
 // An idle connection can drop (e.g. the database restarts). Without this
