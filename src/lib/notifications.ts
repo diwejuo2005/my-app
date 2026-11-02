@@ -1,8 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Member } from '../context/MembersContext';
+import { SafetyItem } from './safety';
 
-const SEEN_KEY = 'ensemble_seen_alerts';
+const SEEN_KEY = 'instereo_seen_alerts';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -30,27 +31,12 @@ async function markSeen(ids: Set<string>) {
   await AsyncStorage.setItem(SEEN_KEY, JSON.stringify(Array.from(ids)));
 }
 
-const DANGER_KEYWORDS = [
-  'hurricane', 'typhoon', 'cyclone', 'tornado', 'earthquake', 'tsunami',
-  'flood', 'wildfire', 'forest fire', 'avalanche', 'volcano', 'eruption',
-  'shooting', 'gunshot', 'gunfire', 'shot dead', 'mass shooting', 'gunman',
-  'explosion', 'bomb', 'bombing', 'blast', 'detonation',
-  'attack', 'terrorist', 'terrorism', 'extremist',
-  'riot', 'armed conflict', 'civil war', 'massacre', 'airstrike', 'shelling',
-  'chemical', 'nuclear', 'radiation leak',
-  'evacuation', 'state of emergency', 'emergency alert', 'curfew',
-  'death toll', 'fatalities', 'killed', 'casualties', 'dead',
-  'hostage', 'kidnapping', 'abduction',
-  'outbreak', 'epidemic', 'pandemic', 'quarantine',
-];
+// Only urgent items notify (shootings, disasters, official severe alerts);
+// "heads up" items just show in the feed.
+export async function notifyCritical(member: Member, item: SafetyItem) {
+  if (item.severity !== 'urgent') return;
 
-function isDangerous(title: string, desc: string): boolean {
-  const text = (title + ' ' + desc).toLowerCase();
-  return DANGER_KEYWORDS.some(k => text.includes(k));
-}
-
-export async function notifyCritical(member: Member, article: { title: string; link: string; desc: string }) {
-  const settingsRaw = await AsyncStorage.getItem('ensemble_settings');
+  const settingsRaw = await AsyncStorage.getItem('instereo_settings');
   if (settingsRaw) {
     try {
       const settings = JSON.parse(settingsRaw);
@@ -58,32 +44,29 @@ export async function notifyCritical(member: Member, article: { title: string; l
     } catch {}
   }
 
-  const id = article.link;
   const seen = await getSeen();
-  if (seen.has(id)) return;
-
-  if (!isDangerous(article.title, article.desc)) return;
+  if (seen.has(item.id)) return;
 
   const granted = await requestNotificationPermission();
   if (!granted) return;
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `Alert near ${member.name}`,
-      body: article.title,
-      data: { url: article.link, memberId: member.id },
+      title: `Alert near ${member.name}${member.city ? ` (${member.city})` : ''}`,
+      body: item.title,
+      data: { url: item.url, memberId: member.id },
     },
     trigger: null,
   });
 
-  seen.add(id);
+  seen.add(item.id);
   // Cap memory: keep last 200
   const trimmed = new Set(Array.from(seen).slice(-200));
   await markSeen(trimmed);
 }
 
 export async function notifyBirthday(member: Member, type: 'birthday' | 'anniversary') {
-  const settingsRaw = await AsyncStorage.getItem('ensemble_settings');
+  const settingsRaw = await AsyncStorage.getItem('instereo_settings');
   if (settingsRaw) {
     try {
       const s = JSON.parse(settingsRaw);
@@ -99,7 +82,7 @@ export async function notifyBirthday(member: Member, type: 'birthday' | 'anniver
   const label = type === 'birthday' ? `Today is ${member.name}'s birthday!` : `${member.name}'s anniversary is today!`;
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: 'Ensemble Reminder',
+      title: 'inStereo Reminder',
       body: label,
       data: { memberId: member.id, type },
     },

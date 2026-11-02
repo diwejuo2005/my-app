@@ -1,10 +1,14 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import { Stack } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import { Member, useMembers } from "../context/MembersContext";
+import { updateUserProfile, watchUserProfile } from "../lib/firestore";
+import { describePlace, Place, searchPlaces } from "../lib/geocode";
+import { uploadProfilePhoto } from "../lib/storage";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -18,20 +22,6 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
-type UserProfile = {
-  name: string;
-  photoUri?: string;
-  bio: string;
-  city: string;
-  birthday: string;
-  phone: string;
-  email: string;
-  hometown: string;
-  pronouns: string;
-  wakeHour: number;  // 0–23
-  sleepHour: number; // 0–23
-};
 
 type UpcomingDate = { name: string; type: string; date: Date; daysAway: number };
 
@@ -64,8 +54,6 @@ function getUpcomingDates(members: Member[]): UpcomingDate[] {
   }
   return results.sort((a, b) => a.daysAway - b.daysAway);
 }
-
-const STORAGE_KEY = "ensemble_user_profile";
 
 function fmt12(h24: number): string {
   const isPM = h24 >= 12;
@@ -122,9 +110,14 @@ function HourPicker({
 export default function ProfileScreen() {
   const { members } = useMembers();
   const [name, setName] = useState("");
-  const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
+  const { user } = useAuth();
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [pickedLocalUri, setPickedLocalUri] = useState<string | null>(null);
   const [bio, setBio] = useState("");
-  const [city, setCity] = useState("");
+  const [place, setPlace] = useState<Place | null>(null);
+  const [placeQuery, setPlaceQuery] = useState("");
+  const [placeResults, setPlaceResults] = useState<Place[]>([]);
+  const [searchingPlace, setSearchingPlace] = useState(false);
   const [birthday, setBirthday] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -133,27 +126,35 @@ export default function ProfileScreen() {
   const [wakeHour, setWakeHour] = useState(7);
   const [sleepHour, setSleepHour] = useState(23);
   const [showBirthdayPicker, setShowBirthdayPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const upcomingDates = useMemo(() => getUpcomingDates(members), [members]);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
-      if (raw) {
-        const p: UserProfile = JSON.parse(raw);
-        setName(p.name || "");
-        setPhotoUri(p.photoUri);
-        setBio(p.bio || "");
-        setCity(p.city || "");
-        setBirthday(p.birthday || "");
-        setPhone(p.phone || "");
-        setEmail(p.email || "");
-        setHometown(p.hometown || "");
-        setPronouns(p.pronouns || "");
-        setWakeHour(typeof p.wakeHour === "number" ? p.wakeHour : 7);
-        setSleepHour(typeof p.sleepHour === "number" ? p.sleepHour : 23);
-      }
+    if (!user) return;
+    return watchUserProfile(user.uid, (p) => {
+      if (!p) return;
+      setName(p.name || "");
+      setPhotoUrl(p.photoUrl);
+      setBio(p.bio || "");
+      setPlace(p.city ? {
+        city: p.city,
+        region: p.region || undefined,
+        country: p.country || "",
+        countryCode: p.countryCode || "",
+        timezone: p.timezone,
+        lat: p.lat,
+        lon: p.lon,
+      } : null);
+      setBirthday(p.birthday || "");
+      setPhone(p.phone || "");
+      setEmail(p.email || "");
+      setHometown(p.hometown || "");
+      setPronouns(p.pronouns || "");
+      setWakeHour(typeof p.wakeHour === "number" ? p.wakeHour : 7);
+      setSleepHour(typeof p.sleepHour === "number" ? p.sleepHour : 23);
     });
-  }, []);
+  }, [user?.uid]);
 
   async function pickPhoto() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -163,33 +164,72 @@ export default function ProfileScreen() {
       quality: 0.7,
     });
     if (!result.canceled && result.assets.length > 0) {
-      setPhotoUri(result.assets[0].uri);
+      setPickedLocalUri(result.assets[0].uri);
     }
   }
 
+  async function searchPlace() {
+    if (!placeQuery.trim()) return;
+    setSearchingPlace(true);
+    try {
+      setPlaceResults(await searchPlaces(placeQuery.trim()));
+    } catch {
+      setPlaceResults([]);
+    } finally {
+      setSearchingPlace(false);
+    }
+  }
+
+  function choosePlace(p: Place) {
+    setPlace(p);
+    setPlaceQuery("");
+    setPlaceResults([]);
+  }
+
   async function save() {
+    if (!user) return;
     if (!name.trim()) {
       Alert.alert("Please enter your name");
       return;
     }
-    const profile: UserProfile = {
-      name: name.trim(),
-      photoUri,
-      bio: bio.trim(),
-      city: city.trim(),
-      birthday,
-      phone: phone.trim(),
-      email: email.trim(),
-      hometown: hometown.trim(),
-      pronouns: pronouns.trim(),
-      wakeHour,
-      sleepHour,
-    };
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
-    Alert.alert("Profile saved");
+    setSaving(true);
+    try {
+      const uploadedUrl = pickedLocalUri ? await uploadProfilePhoto(user.uid, pickedLocalUri) : photoUrl;
+      await updateUserProfile(user.uid, {
+        name: name.trim(),
+        photoUrl: uploadedUrl,
+        bio: bio.trim(),
+        // City, country, coordinates and timezone always move together, so a
+        // connection's map pin, local time and weather follow the new city.
+        ...(place && {
+          city: place.city,
+          region: place.region ?? "",
+          country: place.country,
+          countryCode: place.countryCode,
+          timezone: place.timezone,
+          lat: place.lat,
+          lon: place.lon,
+        }),
+        birthday,
+        phone: phone.trim(),
+        email: email.trim(),
+        hometown: hometown.trim(),
+        pronouns: pronouns.trim(),
+        wakeHour,
+        sleepHour,
+      });
+      setPhotoUrl(uploadedUrl);
+      setPickedLocalUri(null);
+      Alert.alert("Profile saved");
+    } catch {
+      Alert.alert("Error", "Could not save your profile. Try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const initials = name.trim() ? name.trim()[0].toUpperCase() : "?";
+  const displayedPhoto = pickedLocalUri || photoUrl || undefined;
 
   return (
     <>
@@ -214,8 +254,8 @@ export default function ProfileScreen() {
         >
           {/* Avatar */}
           <TouchableOpacity style={s.avatarWrap} onPress={pickPhoto}>
-            {photoUri ? (
-              <Image source={{ uri: photoUri }} style={s.avatar} />
+            {displayedPhoto ? (
+              <Image source={{ uri: displayedPhoto }} style={s.avatar} />
             ) : (
               <View style={[s.avatar, s.avatarPlaceholder]}>
                 <Text style={s.avatarInitial}>{initials}</Text>
@@ -313,13 +353,37 @@ export default function ProfileScreen() {
             <Text style={s.sectionTitle}>Location & Work</Text>
 
             <Text style={s.label}>CURRENT CITY</Text>
-            <TextInput
-              style={s.input}
-              value={city}
-              onChangeText={setCity}
-              placeholder="Where are you based?"
-              placeholderTextColor="rgba(255,255,255,0.3)"
-            />
+            {place && (
+              <View style={s.currentPlace}>
+                <Ionicons name="location" size={16} color="#a78bfa" />
+                <Text style={s.currentPlaceText}>{describePlace(place)}</Text>
+              </View>
+            )}
+            <View style={s.placeSearchRow}>
+              <TextInput
+                style={[s.input, { flex: 1 }]}
+                value={placeQuery}
+                onChangeText={setPlaceQuery}
+                onSubmitEditing={searchPlace}
+                returnKeyType="search"
+                placeholder={place ? "Moved? Search a new city" : "Search for your city"}
+                placeholderTextColor="rgba(255,255,255,0.3)"
+              />
+              <TouchableOpacity style={s.placeSearchBtn} onPress={searchPlace} disabled={searchingPlace}>
+                {searchingPlace
+                  ? <ActivityIndicator color="#a78bfa" size="small" />
+                  : <Ionicons name="search" size={18} color="#a78bfa" />}
+              </TouchableOpacity>
+            </View>
+            {placeResults.map((p) => (
+              <TouchableOpacity
+                key={`${p.lat},${p.lon}`}
+                style={s.placeResult}
+                onPress={() => choosePlace(p)}
+              >
+                <Text style={s.placeResultText}>{describePlace(p)}</Text>
+              </TouchableOpacity>
+            ))}
 
             <Text style={s.label}>HOMETOWN</Text>
             <TextInput
@@ -389,8 +453,8 @@ export default function ProfileScreen() {
           )}
 
           {/* Save */}
-          <TouchableOpacity style={s.saveBtn} onPress={save}>
-            <Text style={s.saveBtnText}>Save Profile</Text>
+          <TouchableOpacity style={[s.saveBtn, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
+            <Text style={s.saveBtnText}>{saving ? "Saving…" : "Save Profile"}</Text>
           </TouchableOpacity>
 
           <View style={{ height: 60 }} />
@@ -464,6 +528,30 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
+  currentPlace: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  currentPlaceText: { color: "#f0f0f6", fontSize: 15, flexShrink: 1 },
+  placeSearchRow: { flexDirection: "row", gap: 8 },
+  placeSearchBtn: {
+    width: 46,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(167,139,250,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(167,139,250,0.3)",
+  },
+  placeResult: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  placeResultText: { color: "rgba(255,255,255,0.85)", fontSize: 14 },
   dateBtn: {
     backgroundColor: "rgba(255,255,255,0.07)",
     borderRadius: 10,

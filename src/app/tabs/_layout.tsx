@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFonts, DancingScript_700Bold } from '@expo-google-fonts/dancing-script';
-import { Tabs, useRouter, usePathname } from "expo-router";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Tabs, useRouter } from "expo-router";
 import { ComponentProps, useEffect, useState } from 'react';
 import {
   Image,
@@ -11,20 +10,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-type UserProfile = {
-  name: string;
-  photoUri?: string;
-  bio?: string;
-  city?: string;
-  birthday?: string;
-  phone?: string;
-  email?: string;
-  hometown?: string;
-  pronouns?: string;
-  wakeHour?: number;
-  sleepHour?: number;
-};
+import { useAuth } from "../../context/AuthContext";
+import { UserProfile, watchConnections, watchUserProfile } from "../../lib/firestore";
 
 // expo-router vendors its own BottomTabBarProps type (not publicly exported) that's
 // structurally close to but not identical to @react-navigation/bottom-tabs's own —
@@ -62,7 +49,7 @@ function ScrollableTabBar({ state, descriptors, navigation }: TabBarProps) {
       >
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
-          const HIDDEN = new Set(['news', 'people', 'chat', 'moments']);
+          const HIDDEN = new Set(['news', 'chat', 'moments']);
           if (HIDDEN.has(route.name)) return null;
           const isFocused = state.index === index;
           const label = (options.title ?? route.name) as string;
@@ -113,15 +100,25 @@ function ScrollableTabBar({ state, descriptors, navigation }: TabBarProps) {
 
 export default function TabLayout() {
   const router = useRouter();
-  const pathname = usePathname();
+  const { user } = useAuth();
   const [fontsLoaded] = useFonts({ DancingScript_700Bold });
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [requestCount, setRequestCount] = useState(0);
 
   useEffect(() => {
-    AsyncStorage.getItem("ensemble_user_profile").then((raw) => {
-      if (raw) setUserProfile(JSON.parse(raw));
+    if (!user) { setUserProfile(null); return; }
+    return watchUserProfile(user.uid, setUserProfile);
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user) { setRequestCount(0); return; }
+    return watchConnections(user.uid, (connections) => {
+      const pending = connections.filter(
+        (c) => c.status === "pending_label" && !c.labels?.[user.uid]
+      );
+      setRequestCount(pending.length);
     });
-  }, [pathname]);
+  }, [user?.uid]);
 
   return (
     <Tabs
@@ -155,7 +152,7 @@ export default function TabLayout() {
                     letterSpacing: 0,
                   }}
                 >
-                  Ensemble
+                  inStereo
                 </Text>
                 <Text
                   style={{
@@ -169,9 +166,26 @@ export default function TabLayout() {
                   {title}
                 </Text>
                 <View style={{ position: "absolute", right: 12, top: 8, flexDirection: "row", alignItems: "center", gap: 2 }}>
+                  <TouchableOpacity
+                    onPress={() => router.push("/connections")}
+                    style={{ padding: 6 }}
+                  >
+                    <Ionicons name="mail-unread-outline" size={22} color="#a78bfa" />
+                    {requestCount > 0 && (
+                      <View style={{
+                        position: "absolute", top: 2, right: 2,
+                        minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3,
+                        backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center",
+                      }}>
+                        <Text style={{ color: "#fff", fontSize: 10, fontWeight: "700" }}>
+                          {requestCount > 9 ? "9+" : requestCount}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => router.push('/profile')} style={{ padding: 4 }}>
-                    {userProfile?.photoUri ? (
-                      <Image source={{ uri: userProfile.photoUri }} style={{ width: 28, height: 28, borderRadius: 14 }} />
+                    {userProfile?.photoUrl ? (
+                      <Image source={{ uri: userProfile.photoUrl }} style={{ width: 28, height: 28, borderRadius: 14 }} />
                     ) : (
                       <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#2d3a5a", alignItems: "center", justifyContent: "center" }}>
                         <Ionicons name="person" size={14} color="rgba(255,255,255,0.7)" />
@@ -228,7 +242,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen name="news" options={{ href: null } as any} />
-      <Tabs.Screen name="people" options={{ href: null } as any} />
       <Tabs.Screen name="chat" options={{ href: null } as any} />
       <Tabs.Screen name="moments" options={{ href: null } as any} />
     </Tabs>

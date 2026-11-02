@@ -49,7 +49,7 @@ export default function AboutScreen() {
               },
             ]}
           >
-            Ensemble
+            inStereo
           </Text>
           <Text style={a.heroSlogan}>everyone, everywhere, all together</Text>
         </View>
@@ -58,13 +58,13 @@ export default function AboutScreen() {
         <View style={a.card}>
           <Text style={a.sectionTitle}>Our Mission</Text>
           <Text style={a.body}>
-            Ensemble bridges the distance between you and the people you love. Built for a world where families are spread across cities, time zones, and continents — we make staying close feel effortless. No mental math, no scattered apps. Just your people, at a glance.
+            inStereo bridges the distance between you and the people you love. Built for a world where families are spread across cities, time zones, and continents — we make staying close feel effortless. No mental math, no scattered apps. Just your people, at a glance.
           </Text>
         </View>
 
-        {/* What Ensemble Can Do */}
+        {/* What inStereo Can Do */}
         <View style={a.card}>
-          <Text style={a.sectionTitle}>What Ensemble Can Do</Text>
+          <Text style={a.sectionTitle}>What inStereo Can Do</Text>
           {FEATURES.map((feature, i) => (
             <View key={i} style={a.featureRow}>
               <Ionicons name="checkmark-circle" size={16} color="#a78bfa" style={{ marginTop: 2 }} />
@@ -77,7 +77,7 @@ export default function AboutScreen() {
         <View style={a.card}>
           <Text style={a.sectionTitle}>Countries We Support</Text>
           <Text style={a.body}>
-            Ensemble supports locations in over 180 countries — from the United States and United Kingdom to India, Nigeria, Brazil, Japan, and everywhere in between. Our news coverage spans major regions worldwide with local context for each.
+            inStereo supports locations in over 180 countries — from the United States and United Kingdom to India, Nigeria, Brazil, Japan, and everywhere in between. Our news coverage spans major regions worldwide with local context for each.
           </Text>
         </View>
 
@@ -85,13 +85,13 @@ export default function AboutScreen() {
         <View style={a.card}>
           <Text style={a.sectionTitle}>A Note From the Founder</Text>
           <Text style={a.quote}>
-            Distance is a fact. Disconnection is a choice. Ensemble was built because staying close to family should not require effort — it should be as natural as looking at your phone. We built this for every student studying abroad, every immigrant starting over, every parent watching their child move across the world. You are not alone.
+            Distance is a fact. Disconnection is a choice. inStereo was built because staying close to family should not require effort — it should be as natural as looking at your phone. We built this for every student studying abroad, every immigrant starting over, every parent watching their child move across the world. You are not alone.
           </Text>
         </View>
 
         {/* Footer */}
         <View style={a.footer}>
-          <Text style={a.footerText}>Ensemble · v0.1 · Made with care</Text>
+          <Text style={a.footerText}>inStereo · v0.1 · Made with care</Text>
         </View>
         <View style={{ height: 60 }} />
       </ScrollView>

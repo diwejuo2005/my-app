@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useState } from "react";
 import {
-  Alert,
   Image,
   Modal,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { useMembers } from "../../context/MembersContext";
+import { confirmAction } from "../../lib/confirm";
 
 type Moment = {
   id: string;
@@ -25,7 +25,7 @@ type Moment = {
 
 type MomentsMap = Record<string, Moment[]>;
 
-const STORAGE_KEY = "ensemble_moments";
+const STORAGE_KEY = "instereo_moments";
 
 const AVATAR_COLORS = [
   "#2d3a5a",
@@ -112,20 +112,11 @@ export default function MomentsScreen() {
   }
 
   function handleLongPress(memberId: number, moment: Moment) {
-    Alert.alert("Delete this memory?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          const key = memberId.toString();
-          const filtered = (momentsMap[key] || []).filter(
-            (m) => m.id !== moment.id
-          );
-          await saveMoments({ ...momentsMap, [key]: filtered });
-        },
-      },
-    ]);
+    confirmAction("Delete this memory?", undefined, "Delete", async () => {
+      const key = memberId.toString();
+      const filtered = (momentsMap[key] || []).filter((m) => m.id !== moment.id);
+      await saveMoments({ ...momentsMap, [key]: filtered });
+    });
   }
 
   return (

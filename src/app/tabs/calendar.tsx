@@ -1,6 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Calendar from "expo-calendar";
+// expo-calendar's default export now throws on every *Async method at
+// runtime to force migration off the old API — expo-calendar/legacy still
+// has the real, working implementations under the same names.
+import * as Calendar from "expo-calendar/legacy";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -18,6 +21,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "../../context/AuthContext";
+import { confirmAction, notifyMessage } from "../../lib/confirm";
+import { SharedCalendarEvent, updateUserProfile } from "../../lib/firestore";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -40,8 +46,8 @@ type CalendarEvent = {
 // Constants
 // ---------------------------------------------------------------------------
 
-const STORAGE_KEY = "ensemble_calendar";
-const VISIBILITY_KEY = "ensemble_calendar_visibility";
+const STORAGE_KEY = "instereo_calendar";
+const VISIBILITY_KEY = "instereo_calendar_visibility";
 
 const EVENT_COLORS = [
   "#7c6af7",
@@ -155,6 +161,20 @@ async function loadEvents(): Promise<CalendarEvent[]> {
   }
 }
 
+// Redact before it ever leaves the device — connections only ever see what
+// this function decides to send them, never the raw event list.
+function redactForSharing(events: CalendarEvent[], visibility: CalendarVisibility): SharedCalendarEvent[] {
+  if (visibility === "hidden") return [];
+  if (visibility === "availability") {
+    return events.map((e) => ({
+      id: e.id, title: "Busy", date: e.date, startTime: e.startTime, endTime: e.endTime, color: "#6b7280",
+    }));
+  }
+  return events.map((e) => ({
+    id: e.id, title: e.title, date: e.date, startTime: e.startTime, endTime: e.endTime, color: e.color, notes: e.notes,
+  }));
+}
+
 async function saveEvents(events: CalendarEvent[]): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(events));
 }
@@ -185,7 +205,7 @@ function allDayDateString(raw: Date | string | undefined): string | null {
 }
 
 function mapDeviceEvent(
-  ev: Calendar.ExpoCalendarEvent,
+  ev: Calendar.Event,
   calColor: string
 ): CalendarEvent | null {
   // All-day events: pin to 8–9 AM using the correct UTC date
@@ -568,19 +588,19 @@ function EventModal({
 
   function handleSave() {
     if (!title.trim()) {
-      Alert.alert("Title required", "Please enter a title for this event.");
+      notifyMessage("Title required", "Please enter a title for this event.");
       return;
     }
     if (!isValidTime(startTime)) {
-      Alert.alert("Invalid start time", "Enter time as HH:MM (e.g. 09:00).");
+      notifyMessage("Invalid start time", "Enter time as HH:MM (e.g. 09:00).");
       return;
     }
     if (!isValidTime(endTime)) {
-      Alert.alert("Invalid end time", "Enter time as HH:MM (e.g. 10:00).");
+      notifyMessage("Invalid end time", "Enter time as HH:MM (e.g. 10:00).");
       return;
     }
     if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
-      Alert.alert("Invalid times", "End time must be after start time.");
+      notifyMessage("Invalid times", "End time must be after start time.");
       return;
     }
     onSave({
@@ -596,14 +616,7 @@ function EventModal({
 
   function handleDelete() {
     if (!initial.id) return;
-    Alert.alert("Delete event?", `"${title}" will be removed.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => onDelete(initial.id!),
-      },
-    ]);
+    confirmAction("Delete event?", `"${title}" will be removed.`, "Delete", () => onDelete(initial.id!));
   }
 
   function formatDate(ds: string): string {
@@ -1248,7 +1261,7 @@ function SyncHelpModal({
           </View>
           <Text style={shm.title}>Sync Your Google Calendar</Text>
           <Text style={shm.subtitle}>
-            Connect Google to iOS Calendar so Ensemble can read your events.
+            Connect Google to iOS Calendar so inStereo can read your events.
             This is a one-time setup — do it once and it syncs automatically.
           </Text>
           <View style={shm.stepsCard}>
@@ -1465,6 +1478,7 @@ const dsb = StyleSheet.create({
 // ---------------------------------------------------------------------------
 
 export default function CalendarScreen() {
+  const { user } = useAuth();
   const [weekOffset, setWeekOffset] = useState(0);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -1561,13 +1575,10 @@ export default function CalendarScreen() {
       const rangeEnd = addDays(today, 60);
 
       // Fetch per-calendar so a bad calendar can't silently drop everything
-      const allRaw: Calendar.ExpoCalendarEvent[] = [];
+      const allRaw: Calendar.Event[] = [];
       for (const cal of cals) {
         try {
-          // expo-calendar's legacy getEventsAsync .d.ts mistakenly types its return as
-          // the global DOM `Event[]` (a missing import in its own type shim); the actual
-          // runtime objects are ExpoCalendarEvent.
-          const evs = await Calendar.getEventsAsync([cal.id], rangeStart, rangeEnd) as unknown as Calendar.ExpoCalendarEvent[];
+          const evs = await Calendar.getEventsAsync([cal.id], rangeStart, rangeEnd);
           console.log(`[Cal] "${cal.title}": ${evs.length} events`);
           allRaw.push(...evs);
         } catch (calErr) {
@@ -1594,7 +1605,7 @@ export default function CalendarScreen() {
       setDeviceEvents(mapped);
       setDeviceEventCount(mapped.length);
     } catch (err) {
-      console.warn("[Ensemble] Calendar sync error:", err);
+      console.warn("[inStereo] Calendar sync error:", err);
     } finally {
       setSyncLoading(false);
     }
@@ -1623,21 +1634,15 @@ export default function CalendarScreen() {
   }
 
   function handleRevoke() {
-    Alert.alert(
+    confirmAction(
       "Remove calendar sync?",
-      "Your device calendar events will be hidden from Ensemble. You can re-enable this at any time.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setPermissionGranted(false);
-            setDeviceEvents([]);
-            setDeviceEventCount(0);
-          },
-        },
-      ]
+      "Your device calendar events will be hidden from inStereo. You can re-enable this at any time.",
+      "Remove",
+      () => {
+        setPermissionGranted(false);
+        setDeviceEvents([]);
+        setDeviceEventCount(0);
+      }
     );
   }
 
@@ -1650,6 +1655,20 @@ export default function CalendarScreen() {
     () => [...events, ...deviceEvents],
     [events, deviceEvents]
   );
+
+  // Push a redacted copy to every connection whenever the shareable data
+  // actually changes — skips the write if nothing changed, since
+  // syncDeviceCalendar() re-polls every 30s regardless of whether anything
+  // on the device actually did.
+  const lastPublishedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    const redacted = redactForSharing(allEvents, visibility);
+    const key = JSON.stringify({ redacted, visibility });
+    if (key === lastPublishedRef.current) return;
+    lastPublishedRef.current = key;
+    updateUserProfile(user.uid, { calendarEvents: redacted, calendarVisibility: visibility });
+  }, [allEvents, visibility, user?.uid]);
 
   async function persistEvents(updated: CalendarEvent[]) {
     setEvents(updated);

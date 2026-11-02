@@ -84,22 +84,22 @@ export default function InviteScreen() {
         ) : invite ? (
           <>
             <View style={s.avatarWrap}>
-              {invite.creatorPhotoUrl ? (
-                <Image source={{ uri: invite.creatorPhotoUrl }} style={s.avatar} />
+              {invite.creatorProfile.photoUrl ? (
+                <Image source={{ uri: invite.creatorProfile.photoUrl }} style={s.avatar} />
               ) : (
                 <View style={s.avatarFallback}>
-                  <Text style={s.avatarInitial}>{invite.creatorName?.[0]?.toUpperCase()}</Text>
+                  <Text style={s.avatarInitial}>{invite.creatorProfile.name?.[0]?.toUpperCase()}</Text>
                 </View>
               )}
             </View>
             <Text style={s.title}>
-              <Text style={s.name}>{invite.creatorName}</Text> wants to connect with you
+              <Text style={s.name}>{invite.creatorProfile.name}</Text> wants to connect with you
             </Text>
-            {(invite.creatorCity || invite.creatorCountry) && (
+            {(invite.creatorProfile.city || invite.creatorProfile.country) && (
               <View style={s.locationRow}>
                 <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.4)" />
                 <Text style={s.locationTxt}>
-                  {[invite.creatorCity, invite.creatorCountry].filter(Boolean).join(", ")}
+                  {[invite.creatorProfile.city, invite.creatorProfile.country].filter(Boolean).join(", ")}
                 </Text>
               </View>
             )}
@@ -141,11 +141,11 @@ export default function InviteScreen() {
     <ScrollView style={s.root} contentContainerStyle={s.content}>
       <View style={s.header}>
         <View style={s.avatarWrap}>
-          {invite?.creatorPhotoUrl ? (
-            <Image source={{ uri: invite.creatorPhotoUrl }} style={s.avatar} />
+          {invite?.creatorProfile.photoUrl ? (
+            <Image source={{ uri: invite.creatorProfile.photoUrl }} style={s.avatar} />
           ) : (
             <View style={s.avatarFallback}>
-              <Text style={s.avatarInitial}>{invite?.creatorName?.[0]?.toUpperCase()}</Text>
+              <Text style={s.avatarInitial}>{invite?.creatorProfile.name?.[0]?.toUpperCase()}</Text>
             </View>
           )}
           <View style={s.linkBadge}>
@@ -153,13 +153,13 @@ export default function InviteScreen() {
           </View>
         </View>
         <Text style={s.title}>
-          <Text style={s.name}>{invite?.creatorName}</Text> wants to connect with you
+          <Text style={s.name}>{invite?.creatorProfile.name}</Text> wants to connect with you
         </Text>
-        {(invite?.creatorCity || invite?.creatorCountry) && (
+        {(invite?.creatorProfile.city || invite?.creatorProfile.country) && (
           <View style={s.locationRow}>
             <Ionicons name="location-outline" size={13} color="rgba(255,255,255,0.4)" />
             <Text style={s.locationTxt}>
-              {[invite?.creatorCity, invite?.creatorCountry].filter(Boolean).join(", ")}
+              {[invite?.creatorProfile.city, invite?.creatorProfile.country].filter(Boolean).join(", ")}
             </Text>
           </View>
         )}
@@ -196,7 +196,7 @@ export default function InviteScreen() {
         ) : (
           <>
             <Ionicons name="people" size={18} color="#fff" style={{ marginRight: 8 }} />
-            <Text style={s.btnTxt}>Connect with {invite?.creatorName?.split(" ")[0]}</Text>
+            <Text style={s.btnTxt}>Connect with {invite?.creatorProfile.name?.split(" ")[0]}</Text>
           </>
         )}
       </TouchableOpacity>

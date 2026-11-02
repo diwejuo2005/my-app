@@ -6,7 +6,6 @@ import {
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -25,16 +24,20 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Alert.alert() is a silent no-op on react-native-web, so errors here are
+  // shown inline instead — that works identically on every platform.
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit() {
+    setError(null);
     const e = email.trim().toLowerCase();
     const p = password;
     if (!e || !p) {
-      Alert.alert("Missing fields", "Enter your email and password.");
+      setError("Enter your email and password.");
       return;
     }
     if (p.length < 6) {
-      Alert.alert("Weak password", "Password must be at least 6 characters.");
+      setError("Password must be at least 6 characters.");
       return;
     }
     setLoading(true);
@@ -54,7 +57,7 @@ export default function LoginScreen() {
             : err.code === "auth/invalid-email"
               ? "Enter a valid email address."
               : "Something went wrong: " + (err.code ?? err.message);
-      Alert.alert("Error", msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -68,7 +71,7 @@ export default function LoginScreen() {
       <StatusBar barStyle="light-content" />
 
       <View style={s.top}>
-        <Text style={s.wordmark}>Ensemble</Text>
+        <Text style={s.wordmark}>inStereo</Text>
         <Text style={s.tagline}>Stay close, no matter the distance.</Text>
       </View>
 
@@ -76,7 +79,7 @@ export default function LoginScreen() {
         <View style={s.toggle}>
           <TouchableOpacity
             style={[s.toggleBtn, mode === "signin" && s.toggleActive]}
-            onPress={() => setMode("signin")}
+            onPress={() => { setMode("signin"); setError(null); }}
           >
             <Text style={[s.toggleTxt, mode === "signin" && s.toggleTxtActive]}>
               Sign in
@@ -84,13 +87,15 @@ export default function LoginScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.toggleBtn, mode === "signup" && s.toggleActive]}
-            onPress={() => setMode("signup")}
+            onPress={() => { setMode("signup"); setError(null); }}
           >
             <Text style={[s.toggleTxt, mode === "signup" && s.toggleTxtActive]}>
               Create account
             </Text>
           </TouchableOpacity>
         </View>
+
+        {error ? <Text style={s.errorTxt}>{error}</Text> : null}
 
         <Text style={s.label}>Email</Text>
         <TextInput
@@ -144,7 +149,7 @@ export default function LoginScreen() {
       </View>
 
       <Text style={s.footer}>
-        By continuing you agree to Ensemble's Terms & Privacy Policy.
+        By continuing you agree to inStereo's Terms & Privacy Policy.
       </Text>
     </KeyboardAvoidingView>
   );
@@ -194,6 +199,12 @@ const s = StyleSheet.create({
   toggleActive: { backgroundColor: "#a78bfa" },
   toggleTxt: { color: "rgba(255,255,255,0.45)", fontSize: 14, fontWeight: "600" },
   toggleTxtActive: { color: "#fff" },
+  errorTxt: {
+    color: "#f87171",
+    fontSize: 13,
+    marginBottom: 8,
+    textAlign: "center",
+  },
   label: {
     color: "rgba(255,255,255,0.45)",
     fontSize: 11,

@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useMemo, useState } from "react";
 import {
   Dimensions,
   FlatList,
@@ -11,7 +12,6 @@ import {
   View,
 } from "react-native";
 import WebView from "react-native-webview";
-import { Ionicons } from "@expo/vector-icons";
 import { Member, useMembers } from "../../context/MembersContext";
 
 // ─── Flat-map fallback (used when globe.gl CDN is unreachable) ──────────────
@@ -277,19 +277,20 @@ export default function GlobeScreen() {
     ? members.filter((m) => selectedCity.memberIds.includes(m.id))
     : [];
 
-  const html = useMemo(() => {
-    const data = JSON.stringify(
-      members.map((m) => ({
-        id: m.id,
-        name: m.name,
-        city: m.city,
-        lat: m.lat,
-        lon: m.lon,
-        relationship: m.relationship,
-      }))
-    );
-    return GLOBE_HTML_TEMPLATE.replace("__MEMBERS_DATA__", data);
-  }, [members]);
+  // Keyed on the pin data itself (not the members array) so the globe only
+  // reloads when someone's pin actually moves or is relabeled — not on every
+  // snapshot, e.g. a pulse score update, which would reset the user's spin.
+  const pinsJson = JSON.stringify(
+    members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      city: m.city,
+      lat: m.lat,
+      lon: m.lon,
+      relationship: m.relationship,
+    }))
+  );
+  const html = useMemo(() => GLOBE_HTML_TEMPLATE.replace("__MEMBERS_DATA__", pinsJson), [pinsJson]);
 
   function handleMessage(event: { nativeEvent: { data: string } }) {
     try {
@@ -299,7 +300,7 @@ export default function GlobeScreen() {
       } else if (msg.type === "pin-click") {
         setSelectedCity({ city: msg.city, memberIds: msg.memberIds });
       }
-    } catch {}
+    } catch { }
   }
 
   return (

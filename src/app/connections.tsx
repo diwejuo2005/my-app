@@ -6,11 +6,14 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   Share,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -21,7 +24,8 @@ import {
   getConnectionsWithProfiles,
   getUserProfile,
   labelConnection,
-  UserProfile,
+  ProfileSnapshot,
+  toProfileSnapshot,
 } from "../lib/firestore";
 
 const RELATIONSHIP_OPTIONS = [
@@ -105,7 +109,7 @@ const lp = StyleSheet.create({
   saveTxt: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });
 
-type ConnWithProfile = { connection: Connection; profile: UserProfile };
+type ConnWithProfile = { connection: Connection; profile: ProfileSnapshot };
 
 export default function ConnectionsScreen() {
   const { user } = useAuth();
@@ -114,6 +118,8 @@ export default function ConnectionsScreen() {
   const [loading, setLoading] = useState(true);
   const [inviting, setInviting] = useState(false);
   const [labelingId, setLabelingId] = useState<string | null>(null);
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function load() {
     if (!user) return;
@@ -128,29 +134,53 @@ export default function ConnectionsScreen() {
 
   useEffect(() => { load(); }, [user?.uid]);
 
+  // RN's Alert.alert() is a silent no-op on react-native-web, and window.alert()
+  // is unreliable on mobile browsers once it fires after an `await` — Safari in
+  // particular only honors alert()/clipboard calls made synchronously within
+  // the user gesture, so by the time createInvite() resolves it can get
+  // silently dropped. An in-app modal has no such timing requirement.
+  function notify(title: string, message?: string) {
+    if (Platform.OS === "web") {
+      window.alert(message ? `${title}\n\n${message}` : title);
+    } else {
+      Alert.alert(title, message);
+    }
+  }
+
   async function handleInvite() {
     if (!user) return;
     setInviting(true);
     try {
       const profile = await getUserProfile(user.uid);
-      const inviteId = await createInvite(
-        user.uid,
-        profile?.name || "Someone",
-        profile?.photoUrl || null,
-        profile?.city || "",
-        profile?.country || ""
-      );
+      if (!profile) { notify("Error", "Could not load your profile."); return; }
+      const inviteId = await createInvite(user.uid, toProfileSnapshot(profile));
       const url = Linking.createURL(`invite/${inviteId}`);
-      await Share.share({
-        message: `Join me on Ensemble! Tap this link to connect: ${url}`,
-        url,
-      });
+      if (Platform.OS === "web") {
+        setCopied(false);
+        setInviteUrl(url);
+      } else {
+        await Share.share({
+          message: `Join me on inStereo! Tap this link to connect: ${url}`,
+          url,
+        });
+      }
     } catch (err: any) {
       if (err?.message !== "The user did not share") {
-        Alert.alert("Error", String(err?.message ?? err));
+        notify("Error", String(err?.message ?? err));
       }
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function copyInviteUrl() {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+    } catch {
+      // Clipboard API can refuse silently (insecure origin, permissions,
+      // older Safari); the link is still shown as selectable text either way.
     }
   }
 
@@ -303,6 +333,29 @@ export default function ConnectionsScreen() {
 
         {loading && <ActivityIndicator color="#a78bfa" style={{ marginTop: 40 }} />}
       </ScrollView>
+
+      <Modal visible={!!inviteUrl} transparent animationType="fade" onRequestClose={() => setInviteUrl(null)}>
+        <View style={s.modalBackdrop}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>Invite link ready</Text>
+            <Text style={s.modalSub}>Send this to whoever you want to connect with.</Text>
+            <TextInput
+              style={s.modalUrlInput}
+              value={inviteUrl ?? ""}
+              editable={false}
+              selectTextOnFocus
+              multiline
+            />
+            <TouchableOpacity style={s.modalCopyBtn} onPress={copyInviteUrl} activeOpacity={0.8}>
+              <Ionicons name={copied ? "checkmark" : "copy-outline"} size={16} color="#fff" />
+              <Text style={s.modalCopyBtnTxt}>{copied ? "Copied!" : "Copy link"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.modalDoneBtn} onPress={() => setInviteUrl(null)}>
+              <Text style={s.modalDoneBtnTxt}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -368,4 +421,25 @@ const s = StyleSheet.create({
   empty: { alignItems: "center", paddingTop: 60, gap: 12 },
   emptyTxt: { color: "rgba(255,255,255,0.5)", fontSize: 17, fontWeight: "600" },
   emptySub: { color: "rgba(255,255,255,0.25)", fontSize: 13, textAlign: "center", lineHeight: 19 },
+  modalBackdrop: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.7)",
+    alignItems: "center", justifyContent: "center", padding: 24,
+  },
+  modalCard: {
+    width: "100%", maxWidth: 420, backgroundColor: "#13131c", borderRadius: 20,
+    padding: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)", gap: 12,
+  },
+  modalTitle: { color: "#f0f0f6", fontSize: 17, fontWeight: "700" },
+  modalSub: { color: "rgba(255,255,255,0.4)", fontSize: 13, marginTop: -8 },
+  modalUrlInput: {
+    backgroundColor: "rgba(255,255,255,0.06)", borderRadius: 12, padding: 12,
+    color: "#a78bfa", fontSize: 13, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)",
+  },
+  modalCopyBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#a78bfa", borderRadius: 12, paddingVertical: 12,
+  },
+  modalCopyBtnTxt: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  modalDoneBtn: { alignItems: "center", paddingVertical: 10 },
+  modalDoneBtnTxt: { color: "rgba(255,255,255,0.4)", fontSize: 14, fontWeight: "600" },
 });

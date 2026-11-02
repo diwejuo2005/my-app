@@ -13,12 +13,14 @@ import {
   View,
 } from "react-native";
 import * as Notifications from "expo-notifications";
+import { useAuth } from "../../context/AuthContext";
+import { updateUserProfile } from "../../lib/firestore";
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
-const MY_MOOD_KEY = "ensemble_my_mood";
-const MY_NOTES_KEY = "ensemble_my_notes";
-const REMINDER_KEY = "ensemble_mood_reminder";
+const MY_MOOD_KEY = "instereo_my_mood";
+const MY_NOTES_KEY = "instereo_my_notes";
+const REMINDER_KEY = "instereo_mood_reminder";
 type MoodMap = Record<string, number>; // YYYY-MM-DD → 1-5
 type NotesMap = Record<string, string>; // weekStartISO → string
 
@@ -218,6 +220,7 @@ const stat = StyleSheet.create({
 // ─── Tab 1: My Mood ───────────────────────────────────────────────────────────
 
 function MyMoodTab() {
+  const { user } = useAuth();
   const [moodMap, setMoodMap] = useState<MoodMap>({});
   const [notesMap, setNotesMap] = useState<NotesMap>({});
   const [reminderOn, setReminderOn] = useState(false);
@@ -265,9 +268,11 @@ function MyMoodTab() {
     const newMap: MoodMap = { ...moodMap, [day]: score };
     setMoodMap(newMap);
     await AsyncStorage.setItem(MY_MOOD_KEY, JSON.stringify(newMap));
+    if (user) updateUserProfile(user.uid, { pulseScores: newMap });
   }
 
   async function saveNote() {
+    if (user) updateUserProfile(user.uid, { weeklyNote: noteText });
     const newMap: NotesMap = { ...notesMap, [weekStart]: noteText };
     setNotesMap(newMap);
     await AsyncStorage.setItem(MY_NOTES_KEY, JSON.stringify(newMap));
@@ -280,7 +285,7 @@ function MyMoodTab() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status === "granted") {
         await Notifications.scheduleNotificationAsync({
-          content: { title: "Ensemble", body: "How are you feeling today?" },
+          content: { title: "inStereo", body: "How are you feeling today?" },
           trigger: { type: "daily", hour: 20, minute: 0 } as Parameters<typeof Notifications.scheduleNotificationAsync>[0]["trigger"],
         });
       }
@@ -412,7 +417,7 @@ const mood = StyleSheet.create({
     lineHeight: 20,
     minHeight: 80,
     textAlignVertical: "top",
-    paddingTop: 0,
+    paddingVertical: 8,
   },
   reminderRow: {
     flexDirection: "row",

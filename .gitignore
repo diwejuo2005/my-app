@@ -36,9 +36,11 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-app-example
 
 # generated native folders
 /ios
 /android
 .claude/worktrees/
+
+# server secrets (copy from server/.env.example)
+.env

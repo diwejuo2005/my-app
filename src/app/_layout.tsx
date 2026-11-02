@@ -5,6 +5,7 @@ import { ActivityIndicator, View } from "react-native";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { MembersProvider } from "../context/MembersContext";
 import { createUserProfile, UserProfile, watchUserProfile } from "../lib/firestore";
+import { migrateLegacyStorageKeys } from "../lib/migrateStorage";
 
 const PENDING_INVITE_KEY = "pendingInviteId";
 
@@ -13,12 +14,6 @@ function AuthGate() {
   const segments = useSegments();
   const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null | "loading">("loading");
-  // "unchecked" means we haven't read AsyncStorage yet — block routing until we do
-  const [pendingInvite, setPendingInvite] = useState<string | null | "unchecked">("unchecked");
-
-  useEffect(() => {
-    AsyncStorage.getItem(PENDING_INVITE_KEY).then((id) => setPendingInvite(id ?? null));
-  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -32,7 +27,7 @@ function AuthGate() {
   }, [user, loading]);
 
   useEffect(() => {
-    if (loading || profile === "loading" || pendingInvite === "unchecked") return;
+    if (loading || profile === "loading") return;
 
     const inAuth = segments[0] === "(auth)";
     const inOnboarding = segments[0] === "(onboarding)";
@@ -49,17 +44,22 @@ function AuthGate() {
       return;
     }
 
-    // Fully authenticated and onboarded
+    // Fully authenticated and onboarded. Read pendingInvite fresh right here
+    // instead of from state set once at mount — the invite screen can write
+    // it during this same live session (when the user taps "Sign In /
+    // Create Account"), well after AuthGate already mounted and did its one
+    // read, so a stale state value would never see it.
     if (inAuth || inOnboarding) {
-      if (pendingInvite) {
-        AsyncStorage.removeItem(PENDING_INVITE_KEY);
-        setPendingInvite(null);
-        router.replace(`/invite/${pendingInvite}` as any);
-      } else {
-        router.replace("/tabs");
-      }
+      AsyncStorage.getItem(PENDING_INVITE_KEY).then((pendingInvite) => {
+        if (pendingInvite) {
+          AsyncStorage.removeItem(PENDING_INVITE_KEY);
+          router.replace(`/invite/${pendingInvite}` as any);
+        } else {
+          router.replace("/tabs");
+        }
+      });
     }
-  }, [user, loading, profile, segments, pendingInvite]);
+  }, [user, loading, profile, segments]);
 
   if (loading || profile === "loading") {
     return (
@@ -73,6 +73,18 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
+  // Screens read local storage on mount, so finish renaming legacy keys first.
+  const [storageReady, setStorageReady] = useState(false);
+  useEffect(() => {
+    migrateLegacyStorageKeys()
+      .catch((err) => console.warn("[inStereo] Storage migration failed:", err))
+      .finally(() => setStorageReady(true));
+  }, []);
+
+  if (!storageReady) {
+    return <View style={{ flex: 1, backgroundColor: "#07080f" }} />;
+  }
+
   return (
     <AuthProvider>
       <MembersProvider>
