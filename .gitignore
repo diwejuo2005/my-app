@@ -44,3 +44,4 @@ yarn-error.*
 
 # server secrets (copy from server/.env.example)
 .env
+.neon
