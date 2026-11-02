@@ -1,0 +1,37 @@
+# Fly.io deploy config for the inStereo API. Deploy from this folder:
+#   fly deploy
+app = "instereo-api"
+primary_region = "iad" # Ashburn, VA — next to the Neon database (aws-us-east-1)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+  # Runs once per deploy, before new machines start. A failed migration
+  # aborts the deploy and leaves the old version running.
+  release_command = "node dist/migrate.js"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # Stop the machine when idle and wake it on the next request — keeps the
+  # bill near zero while only testers use it. Revisit when WebSockets land
+  # (a stopped machine drops live connections).
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
